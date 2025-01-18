@@ -91,7 +91,7 @@ def get_mnist_random_loader(batch_size, num_workers=4, prefetch_factor=2):
     data_loader = DataLoader(
         dataset,
         batch_size=batch_size,
-        shuffle=True,
+        shuffle=False,
         num_workers=num_workers,
         prefetch_factor=prefetch_factor,
         drop_last=True,
