@@ -66,8 +66,13 @@ for epoch in range(EPOCHS):
             vloss = loss_fn(voutputs, vlabels)
             running_vloss += vloss
     avg_vloss = running_vloss / (i + 1)
+    print('LOSS train {} valid {}'.format(avg_loss, avg_vloss))
     writer.add_scalars('Training vs. Validation Loss',
                        {'Training': avg_loss, 'Validation': avg_vloss},
                        epoch + 1)
     writer.flush()
+    if avg_vloss < best_vloss:
+        best_vloss = avg_vloss
+        model_path = 'model_{}_{}'.format(timestamp, epoch)
+        torch.save(model.state_dict(), model_path)
 
