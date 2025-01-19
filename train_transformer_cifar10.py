@@ -59,11 +59,11 @@ def train(lr=1e-3, num_epochs=40, num_images=10):
             pred_label = pred_label.view(-1)
             loss = criterion(outputs, pred_label)
             
-            optimizer.zero_grad()   # Reset gradient
-            loss.backward()         # Backpropagation
+            optimizer.zero_grad()
+            loss.backward()
 
             clip_grad_norm_(model.parameters(), max_norm=0.5)
-            optimizer.step()        # Update parameters
+            optimizer.step()
 
             total_loss += loss.item()
 

@@ -9,7 +9,7 @@ class CIFAR10RandomDataset(Dataset):
     A dataset that samples random images from 2 random classes of the CIFAR-10 dataset.
     """
 
-    def __init__(self, root="./data", num_images=10, num_samples=10000, num_classes=2, random_classes=None, train=True):
+    def __init__(self, root="./data", num_images=10, num_samples=10000, num_classes=2, random_classes=None, train=True, data_type="Cifar10"):
         """
         Initialize the dataset by loading CIFAR-10 and precomputing samples.
 
@@ -21,7 +21,12 @@ class CIFAR10RandomDataset(Dataset):
         self.transform = transforms.Compose([
             transforms.ToTensor()
         ])
-        self.dataset = datasets.CIFAR10(root=root, train=train, download=True, transform=self.transform)
+        if data_type == "Cifar10":
+            self.dataset = datasets.CIFAR10(root=root, train=train, download=True, transform=self.transform)
+        elif data_type == "Cifar100":
+            self.dataset = datasets.CIFAR100(root=root, train=train, download=True, transform=self.transform)
+        else:
+            raise ValueError("Invalid data type. Please specify either Cifar10 or Cifar100.")
         self.data = self.dataset.data  # CIFAR-10 data is stored as numpy arrays
         self.targets = np.array(self.dataset.targets)
 

@@ -14,14 +14,14 @@ class CIFAR10Classifier(nn.Module):
             
             nn.Conv2d(32, 64, kernel_size=3, stride=1, padding=1),  # Output: 64x16x16
             nn.ReLU(),
-            nn.MaxPool2d(kernel_size=2, stride=2),  # Output: 64x8x8
-            nn.Flatten(),  # Flatten the output of conv layers
-            nn.Linear(64 * 8 * 8, 256),  # Fully connected layer
+            nn.MaxPool2d(kernel_size=2, stride=2),
+            nn.Flatten(),
+            nn.Linear(64 * 8 * 8, 256),
             nn.ReLU(),
         )
         self.fc_layers = nn.Sequential(
-            nn.Dropout(0.5),  # Dropout for regularization
-            nn.Linear(256, 10)  # Output layer (10 classes)
+            nn.Dropout(0.5),
+            nn.Linear(256, 10)
         )
     
     def forward(self, x):
@@ -73,13 +73,11 @@ class CustomTransformerModel(nn.Module):
         self.fc.requires_grad = True
 
     def forward(self, x_train, y_train, x_pred):
-        # Get embeddings for x_train and project to 32D
         x_embedded = self.embedding(x_train)  # Shape: (batch, seq, latent_dim)
         x_projected = self.x_projection(x_embedded)  # Shape: (batch, seq, 32)
 
         # Project y_train (scalar or one-hot) to 32D
         y_train = y_train.unsqueeze(-1) if y_train.ndim == 1 else y_train  # Ensure shape (batch, seq, 1)
-        # Make sure y_train is a float tensor
         y_train = y_train.float()
 
         # (batch, seq, 1) -> (batch * seq, 1)
@@ -91,7 +89,6 @@ class CustomTransformerModel(nn.Module):
         # Concatenate x and y projections
         combined_embedded = torch.cat([x_projected, y_projected], dim=-1)  # Shape: (batch, seq, 64)
 
-        # Handle x_pred: Embed and project, but use zero for y_pred
         # (batch, rgb, seq, dim) -> (batch, 1, rgb, seq, dim)
         x_pred = x_pred.unsqueeze(1)
         x_pred_embedded = self.embedding(x_pred)  # Shape: (batch, seq, latent_dim)

@@ -98,13 +98,11 @@ class CustomTransformerModel(nn.Module):
         self.fc.requires_grad = True
 
     def forward(self, x_train, y_train, x_pred):
-        # Get embeddings for x_train and project to 32D
         x_embedded = self.embedding(x_train)  # Shape: (batch, seq, latent_dim)
         x_projected = self.x_projection(x_embedded)  # Shape: (batch, seq, 32)
 
         # Project y_train (scalar or one-hot) to 32D
         y_train = y_train.unsqueeze(-1) if y_train.ndim == 1 else y_train  # Ensure shape (batch, seq, 1)
-        # Make sure y_train is a float tensor
         y_train = y_train.float()
 
         # (batch, seq, 1) -> (batch * seq, 1)
@@ -116,7 +114,7 @@ class CustomTransformerModel(nn.Module):
         # Concatenate x and y projections
         combined_embedded = torch.cat([x_projected, y_projected], dim=-1)  # Shape: (batch, seq, 64)
 
-        # Handle x_pred: Embed and project, but use zero for y_pred
+        # Handle x_pred: Embed and project, but use zero as dummy value for y_pred
         x_pred_embedded = self.embedding(x_pred)  # Shape: (batch, seq, latent_dim)
         x_pred_projected = self.x_projection(x_pred_embedded)  # Shape: (batch, seq, 32)
         y_pred_projected = torch.zeros_like(x_pred_projected, device=self.device) -1  # Shape: (batch, seq, 32)
@@ -142,6 +140,5 @@ class CustomTransformerModel(nn.Module):
 
         # Extract the prediction hidden state and compute logits
         prediction_hidden_state = transformer_output[-1, :, :]  # Shape: (batch_size, hidden_dim)
-        # use mean instead
         logits = self.fc(prediction_hidden_state)  # Shape: (batch_size, num_classes)
         return logits
