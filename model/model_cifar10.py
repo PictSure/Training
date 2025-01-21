@@ -1,92 +1,67 @@
-# Define a Custom Transformer Model Using the Pretrained Embedding Layer
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
+from torchvision import datasets, transforms
 
-class Encoder(nn.Module):
-    def __init__(self, latent_dim):
-        super(Encoder, self).__init__()
-        self.fc1 = nn.Linear(28 * 28, 256)
-        self.fc2 = nn.Linear(256, 128)
-        self.fc_mu = nn.Linear(128, latent_dim)  # Mean of the latent distribution
-        self.fc_log_var = nn.Linear(128, latent_dim)  # Log variance of the latent distribution
-        self.relu = nn.ReLU()
-        self.latent_dim = latent_dim
-
-    def forward(self, x):
-        x = x.view(x.size(0), -1)  # Flatten the input
-        x = self.relu(self.fc1(x))
-        x = self.relu(self.fc2(x))
-        mu = self.fc_mu(x)
-        log_var = self.fc_log_var(x)
-        return mu, log_var
-
-
-class Decoder(nn.Module):
-    def __init__(self, latent_dim):
-        super(Decoder, self).__init__()
-        self.fc1 = nn.Linear(latent_dim, 128)
-        self.fc2 = nn.Linear(128, 256)
-        self.fc3 = nn.Linear(256, 28 * 28)
-        self.relu = nn.ReLU()
-        self.sigmoid = nn.Sigmoid()
-
-    def forward(self, z):
-        z = self.relu(self.fc1(z))
-        z = self.relu(self.fc2(z))
-        z = self.sigmoid(self.fc3(z))
-        return z
-
-
-class Autoencoder(nn.Module):
-    def __init__(self, latent_dim):
-        super(Autoencoder, self).__init__()
-        self.encoder = Encoder(latent_dim)
-        self.decoder = Decoder(latent_dim)
-
-    def reparameterize(self, mu, log_var):
-        # Reparameterization trick: z = mu + std * epsilon
-        std = torch.exp(0.5 * log_var)
-        eps = torch.randn_like(std)  # Sample epsilon from standard normal
-        return mu + eps * std
-
-    def forward(self, x):
-        mu, log_var = self.encoder(x)
-        z = self.reparameterize(mu, log_var)
-        reconstructed = self.decoder(z)
-        return reconstructed, mu, log_var
+# 2. Model Definition
+class CIFAR10Classifier(nn.Module):
+    def __init__(self):
+        super(CIFAR10Classifier, self).__init__()
+        self.conv_layers = nn.Sequential(
+            nn.Conv2d(3, 32, kernel_size=3, stride=1, padding=1),  # Output: 32x32x32
+            nn.ReLU(),
+            nn.MaxPool2d(kernel_size=2, stride=2),  # Output: 32x16x16
+            
+            nn.Conv2d(32, 64, kernel_size=3, stride=1, padding=1),  # Output: 64x16x16
+            nn.ReLU(),
+            nn.MaxPool2d(kernel_size=2, stride=2),
+            nn.Flatten(),
+            nn.Linear(64 * 8 * 8, 256),
+            nn.ReLU(),
+        )
+        self.fc_layers = nn.Sequential(
+            nn.Dropout(0.5),
+            nn.Linear(256, 10)
+        )
     
-class EncocderWrapper(nn.Module):
-    def __init__(self, encoder):
-        super(EncocderWrapper, self).__init__()
-        self.encoder = encoder
-        self.latent_dim = encoder.latent_dim
+    def forward(self, x):
+        x = self.conv_layers(x)
+        x = self.fc_layers(x)
+        return x
+    
+class EmbeddingWrapper(nn.Module):
+    def __init__(self, classifier):
+        super(EmbeddingWrapper, self).__init__()
+        self.classifier = classifier
+        self.latent_dim = 256
+        self.normalize = transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010))  # Normalize using CIFAR-10 stats
 
     def forward(self, x):
-        # Incoming shape (batch, num_images, 1, 28, 28)
-        batch_size, num_images, _, _, _ = x.shape
+        # (batch, num_images, 3, 32, 32) -> (batch * num_images, 3, 32, 32)
+        num_images = x.size(1)
+        batch_size = x.size(0)
 
-        # Rezhape to (batch * num_images, 1, 28, 28)
-        x = x.view(-1, 1, 28, 28)
+        x = x.view(-1, 3, 32, 32)
+        x = self.normalize(x)
+        x = self.classifier.conv_layers(x)
 
-        mu, log_var = self.encoder(x)
-
-        # Return the to shape (batch, num_images, latent_dim)
-        x = mu.view(batch_size, num_images, self.encoder.latent_dim)
+        # (batch * num_images, 256) -> (batch, num_images, 256)
+        x = x.view(batch_size, num_images, 256)
         return x
+
 
 class CustomTransformerModel(nn.Module):
     def __init__(self, embedding_layer, num_classes, device="cpu"):
         super(CustomTransformerModel, self).__init__()
         self.embedding = embedding_layer.to(device)
-
-        self.x_projection = nn.Linear(embedding_layer.latent_dim, 32).to(device)
-        self.y_projection = nn.Linear(1, 32).to(device)
+        self.x_projection = nn.Linear(embedding_layer.latent_dim, 128).to(device)
+        self.y_projection = nn.Linear(1, 128).to(device)
 
         self.transformer_layer = nn.TransformerEncoderLayer(
-            d_model=64, nhead=8, dim_feedforward=512
+            d_model=256, nhead=8, dim_feedforward=512
         )
         self.transformer = nn.TransformerEncoder(self.transformer_layer, num_layers=6).to(device)
-        self.fc = nn.Linear(64, num_classes).to(device)
+        self.fc = nn.Linear(256, num_classes).to(device)
         self.device = device
 
         for param in self.embedding.parameters():
@@ -114,7 +89,8 @@ class CustomTransformerModel(nn.Module):
         # Concatenate x and y projections
         combined_embedded = torch.cat([x_projected, y_projected], dim=-1)  # Shape: (batch, seq, 64)
 
-        # Handle x_pred: Embed and project, but use zero as dummy value for y_pred
+        # (batch, rgb, seq, dim) -> (batch, 1, rgb, seq, dim)
+        x_pred = x_pred.unsqueeze(1)
         x_pred_embedded = self.embedding(x_pred)  # Shape: (batch, seq, latent_dim)
         x_pred_projected = self.x_projection(x_pred_embedded)  # Shape: (batch, seq, 32)
         y_pred_projected = torch.zeros_like(x_pred_projected, device=self.device) -1  # Shape: (batch, seq, 32)
@@ -140,5 +116,6 @@ class CustomTransformerModel(nn.Module):
 
         # Extract the prediction hidden state and compute logits
         prediction_hidden_state = transformer_output[-1, :, :]  # Shape: (batch_size, hidden_dim)
+        # use mean instead
         logits = self.fc(prediction_hidden_state)  # Shape: (batch_size, num_classes)
         return logits
