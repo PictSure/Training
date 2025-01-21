@@ -9,14 +9,15 @@ import matplotlib.pyplot as plt
 import pandas as pd
 
 with open("./configs/local.yaml", "r") as f:
-    config = yaml.load(f)
+    config = yaml.load(f, Loader=yaml.FullLoader)
 
 
-writer = SummaryWriter(directory=config.paths.output, metrics=["loss", "acc"])
+writer = SummaryWriter(directory=config["paths"]["output"], metrics=["loss", "acc"])
 
 training_loader = get_mnist_random_loader(
-    batch_size=config.dataloader.batch_size, num_samples=10000)
+    batch_size=config["dataloader"]["batch_size"], num_samples=10000)
 validation_loader = None
+print("DataLoader")
 
 device = (
     "cuda"
@@ -29,9 +30,9 @@ device = (
 print(f"Using {device} device")
 
 
-EPOCHS = config.model.epochs
+EPOCHS = config["model"]["epochs"]
 # load autoencoder
-autoencoder_path = "model/autoencoder_mnist.pth"
+autoencoder_path = "./model/autoencoder_mnist.pth"
 # load autoencoder
 autoencoder = Autoencoder(latent_dim=64).to(device)
 autoencoder.load_state_dict(torch.load(autoencoder_path))
@@ -43,7 +44,7 @@ encoder.to(device)
 
 model = CustomTransformerModel(encoder, 2, device=device)
 loss_fn = torch.nn.CrossEntropyLoss()
-optimizer = torch.optim.AdamW(model.parameters(), lr=config.model.lr, weight_decay=config.model.weight_decay)
+optimizer = torch.optim.AdamW(model.parameters(), lr=config["model"]["lr"], weight_decay=config["model"]["weight_decay"])
 
 losses = []
 accuracies = []

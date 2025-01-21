@@ -1,0 +1,12 @@
+paths:
+  output: /netscratch/schiesser/embed_then_cat/runs/
+
+model:
+  lr: 1e-3
+  weight_decay: 1e-5
+  epochs: 100
+  log_step: 500
+
+dataloader:
+  num_samples: 10000
+  batch_size: 16
