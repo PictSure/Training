@@ -1,12 +1,13 @@
 import torch
-from utils.data_loader import get_mnist_random_loader
-from model.model import CustomTransformerModel, Autoencoder, EncocderWrapper
+from utils.data_loader_cifar10 import get_cifar10_random_loader
+from model.model_cifar10 import CustomTransformerModel, EmbeddingWrapper, CIFAR10Classifier
 from utils.summary_writer import SummaryWriter
 from torch.nn.utils import clip_grad_norm_
 import yaml
 from tqdm import trange
 import matplotlib.pyplot as plt
 import pandas as pd
+import os
 
 with open("./configs/local.yaml", "r") as f:
     config = yaml.load(f, Loader=yaml.FullLoader)
@@ -14,8 +15,8 @@ with open("./configs/local.yaml", "r") as f:
 
 writer = SummaryWriter(directory=config["paths"]["output"], metrics=["loss", "acc"])
 
-training_loader = get_mnist_random_loader(
-    batch_size=config["dataloader"]["batch_size"], num_samples=10000)
+training_loader = get_cifar10_random_loader(
+    root=config["paths"]["dataset"], batch_size=config["dataloader"]["batch_size"], num_classes=config["dataloader"]["num_classes"], num_samples=10000, num_images=10)
 validation_loader = None
 print("DataLoader")
 
@@ -32,28 +33,34 @@ print(f"Using {device} device")
 
 EPOCHS = config["model"]["epochs"]
 # load autoencoder
-autoencoder_path = "./model/autoencoder_mnist.pth"
+classifier_path = "./weights/cifar10_model.pth"
 # load autoencoder
-autoencoder = Autoencoder(latent_dim=64).to(device)
-autoencoder.load_state_dict(torch.load(autoencoder_path))
-autoencoder.to(device)
-autoencoder.eval()
-encoder = autoencoder.encoder
-encoder = EncocderWrapper(encoder)
-encoder.to(device)
+classifier = CIFAR10Classifier()
+classifier.load_state_dict(torch.load(classifier_path))
+classifier.to(device)
+classifier.eval()
+encoder = EmbeddingWrapper(classifier)
 
-model = CustomTransformerModel(encoder, 2, device=device)
+model = CustomTransformerModel(encoder, config["dataloader"]["num_classes"], device=device)
+model.to(device)
 loss_fn = torch.nn.CrossEntropyLoss()
-optimizer = torch.optim.AdamW(model.parameters(), lr=config["model"]["lr"], weight_decay=config["model"]["weight_decay"])
+lr = config["model"]["lr"]
+initial_lr = config["model"]["lr"] * 0.01
+optimizer = torch.optim.AdamW(model.parameters(), lr=initial_lr, weight_decay=config["model"]["weight_decay"])
 
 losses = []
 accuracies = []
-epoch_progress = trange(EPOCHS)
 writer.log_hyperparameters(config)
 print("Starting training")
+epoch_progress = trange(EPOCHS)
 
 for epoch in range(EPOCHS):
-    print("EPOCH {}:".format(epoch + 1))
+    if epoch < 10:
+        current_lr = initial_lr + (lr - initial_lr) * (epoch / 10)
+    else:
+        current_lr = lr
+    for param_group in optimizer.param_groups:
+        param_group['lr'] = current_lr
     total_correct = 0
     total_samples = 0
     total_loss = 0
@@ -83,11 +90,11 @@ for epoch in range(EPOCHS):
             total_correct += correct
             total_samples += total
             acc = correct / total
-        writer.log_batch_metric("loss", loss)
+        writer.log_batch_metric("loss", loss.item())
         writer.log_batch_metric("acc", acc)
         progressbar.set_description(
             '[Train] Loss: {:.4f}, Acc: {:.2f} [{:>5d}/{:>5d}]'.format(
-                loss, acc, (batch_idx + 1) * len(input),
+                loss, acc, (batch_idx + 1),
                 size
             )
         )
@@ -108,7 +115,7 @@ for epoch in range(EPOCHS):
     avg_grad_norm = total_grad_norm / grad_param_count if grad_param_count > 0 else 0.0
     epoch_progress.update()
     epoch_progress.set_description(
-        "Epoch [{:>5d}/{:>5d}], Loss {:.4f}, Accuracy: {:.2f},  Avg Gradient Norm: {avg_grad_norm:.6f}".format(
+        "Epoch [{:>5d}/{:>5d}], Loss {:.4f}, Accuracy: {:.2f},  Avg Gradient Norm: {:.6f}".format(
             epoch+1, EPOCHS, avg_loss, accuracy, avg_grad_norm
         )
     )
