@@ -126,7 +126,7 @@ def normalize_samples(sampled_images, pred_image):
 
     return normalized_sampled_images, normalized_pred_image
 
-def get_cifar10_random_loader(batch_size=16, num_images=10, num_samples=10000, num_classes=2, train=True):
+def get_cifar10_random_loader(root, batch_size=16, num_images=10, num_samples=10000, num_classes=2, train=True):
     """
     Get DataLoader for the CIFAR-10 Random Dataset.
     
@@ -139,6 +139,6 @@ def get_cifar10_random_loader(batch_size=16, num_images=10, num_samples=10000, n
     Returns:
         cifar10_loader (DataLoader): DataLoader for CIFAR-10 Random Dataset.
     """
-    dataset = CIFAR10RandomDataset(num_images=num_images, num_samples=num_samples, train=train, num_classes=num_classes)
+    dataset = CIFAR10RandomDataset(root=root, num_images=num_images, num_samples=num_samples, train=train, num_classes=num_classes)
     loader = torch.utils.data.DataLoader(dataset, batch_size=batch_size, shuffle=True)
     return loader
