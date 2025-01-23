@@ -27,17 +27,20 @@ batch_size = 16
 
 print("Torch precision: ", torch.get_default_dtype())
 
-def train(lr=1e-3, num_epochs=40, num_images=10):
+def train(lr=1e-3, num_epochs=40, num_images=10, batch_size=batch_size):
     initial_lr = lr * 0.01  # Start with a smaller learning rate
     model = CustomTransformerModel(encoder, num_classes, device)
     model = model.to(device)
     optimizer = optim.AdamW(model.parameters(), lr=initial_lr, weight_decay=1e-5)
-    start_time = time.time()
 
     losses = []
     accuracies = []
 
+    print("Loading training data")
     loader = get_cifar10_random_loader(batch_size=batch_size, num_classes=num_classes, num_samples=100000, num_images=num_images)
+
+    print("Starting training")
+    start_time = time.time()
 
     for epoch in range(num_epochs):
         # Linear ramp up of learning rate only over the first 10 epochs
@@ -103,28 +106,24 @@ def train(lr=1e-3, num_epochs=40, num_images=10):
 learning_rates = [1e-4]
 num_epochs = 30
 batches_per_epoch = 10000
- 
-for lr in learning_rates:
-    for num_images in [10]:
-        avg_loss, accuracy, losses, accuracies = train(lr=lr, num_epochs=num_epochs)
 
-        smoothed_losses = pd.Series(losses).rolling(window=1).mean()
-        smoothed_accuracies = pd.Series(accuracies).rolling(window=1).mean()
+results = {}
 
-        fig, ax1 = plt.subplots(figsize=(10, 5))
+for batch_size, lr in [(16, 1e-4), (32, 1e-4), (64, 1e-3), (128, 1e-3), (256,5e-3), (512, 5e-3)]:
+    avg_loss, accuracy, losses, accuracies = train(lr=lr, num_epochs=num_epochs, batch_size=batch_size)
 
-        ax1.set_xlabel('Batch')
-        ax1.set_ylabel('Loss', color='tab:blue')
-        ax1.plot(smoothed_losses, label='Loss', color='tab:blue')
-        ax1.tick_params(axis='y', labelcolor='tab:blue')
+    smoothed_losses = pd.Series(losses).rolling(window=1).mean()
+    smoothed_accuracies = pd.Series(accuracies).rolling(window=1).mean()
 
-        ax2 = ax1.twinx()
-        ax2.set_ylabel('Accuracy', color='tab:orange')
-        ax2.plot(smoothed_accuracies, label='Accuracy', color='tab:orange')
-        ax2.tick_params(axis='y', labelcolor='tab:orange')
+    results[batch_size] = (smoothed_accuracies, lr)
 
-        fig.tight_layout()
-        plt.title('Loss and Accuracy per Epoch')
-        plt.grid(True)
-        plt.savefig(f"accuracy_cifar_{num_images}.pdf")
-        plt.show()
+# Plot the results
+plt.figure(figsize=(10, 6))
+for batch_size, content in results.items():
+    plt.plot(content[0], label=f'Batch size {batch_size}, Learning rate {content[1]}')
+plt.xlabel('Epoch')
+plt.ylabel('Accuracy')
+plt.title('Accuracy vs. Epoch for different batch sizes')
+plt.legend()
+plt.grid(True)
+plt.savefig("batch_size_comparison_lr.pdf")
