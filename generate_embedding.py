@@ -1,4 +1,4 @@
-from model.model_cifar10 import CIFAR10Classifier, EmbeddingWrapper, CustomTransformerModel
+from model.model_cifar import CIFAR10Classifier, EmbeddingWrapper, CustomTransformerModel
 import torch
 from torchvision import transforms, datasets
 from tqdm import tqdm

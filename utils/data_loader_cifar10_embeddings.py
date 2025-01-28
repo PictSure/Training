@@ -4,6 +4,7 @@ import random
 import numpy as np
 import torch
 import pandas as pd
+import ast
 
 class CIFAR10RandomDataset(Dataset):
     """
@@ -25,7 +26,12 @@ class CIFAR10RandomDataset(Dataset):
         
         dataframe = pd.read_csv(filepath)
 
-        self.data = np.array(dataframe["embedding"].tolist())
+        embeddings = []
+        # Cast strings to lists
+        for col in dataframe["embedding"].tolist():
+            embeddings.append(ast.literal_eval(col))
+
+        self.data = np.array(embeddings)
         self.targets = np.array(dataframe["label"])
 
         # Set parameters
@@ -51,7 +57,8 @@ class CIFAR10RandomDataset(Dataset):
             sampled_labels = []
 
             # Randomly choose 2 classes
-            random_classes = random.sample(range(10), self.num_classes)
+            total_number_of_classes = len(np.unique(self.targets))
+            random_classes = random.sample(range(total_number_of_classes), self.num_classes)
 
             # Get indices for each class
             class_indices = {
@@ -95,9 +102,9 @@ class CIFAR10RandomDataset(Dataset):
         pred_label = self.pred_labels_list[idx]
 
         # Convert to tensors
-        sampled_images = torch.tensor(sampled_images, dtype=torch.float32).permute(0, 3, 1, 2)  # (B, C, H, W)
+        sampled_images = torch.tensor(sampled_images, dtype=torch.float32)
         sampled_labels = torch.tensor(sampled_labels, dtype=torch.long)
-        pred_image = torch.tensor(pred_image, dtype=torch.float32).permute(2, 0, 1)  # (C, H, W)
+        pred_image = torch.tensor(pred_image, dtype=torch.float32)
         pred_label = torch.tensor(pred_label, dtype=torch.long)
 
         return sampled_images, sampled_labels, pred_image, pred_label
@@ -137,6 +144,6 @@ def get_cifar10_random_loader(batch_size=16, num_images=10, num_samples=10000, n
     Returns:
         cifar10_loader (DataLoader): DataLoader for CIFAR-10 Random Dataset.
     """
-    dataset = CIFAR10RandomDataset(num_images=num_images, num_samples=num_samples, train=train, num_classes=num_classes)
+    dataset = CIFAR10RandomDataset(filepath="data/cifar10_embeddings.csv", num_images=num_images, num_samples=num_samples, num_classes=num_classes)
     loader = torch.utils.data.DataLoader(dataset, batch_size=batch_size, shuffle=True)
     return loader
