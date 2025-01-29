@@ -9,7 +9,7 @@ import matplotlib.pyplot as plt
 import pandas as pd
 import os
 
-with open("./configs/local.yaml", "r") as f:
+with open("./configs/slurm.yaml", "r") as f:
     config = yaml.load(f, Loader=yaml.FullLoader)
 
 
@@ -119,7 +119,7 @@ for epoch in range(EPOCHS):
             epoch+1, EPOCHS, avg_loss, accuracy, avg_grad_norm
         )
     )
-
+writer.print_metrics()
 epoch_progress.close()
 writer.save_to_file()
 writer.save_model(model)

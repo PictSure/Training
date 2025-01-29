@@ -3,7 +3,9 @@ from datetime import datetime
 from collections import defaultdict
 import time
 import json
+import csv
 import torch
+from pprint import pprint
 
 class SummaryWriter:
     def __init__(self, directory="./runs/", metrics=[]):
@@ -17,12 +19,25 @@ class SummaryWriter:
         self.rundir = os.path.join(
             directory, datetime.now().strftime('%Y%m%d_%H%M%S'))
         self.params = dict()
+        self.batch_csv_path = os.path.join(
+            self.run_dir, "batch_metrics.csv"
+        )
+        self.epoch_csv_path = os.path.join(
+            self.run_dir, "epoch_metrics.csv"
+        )
+        # Internal caches to hold metrics until flush
+        # list of (phase, batch_idx, metric_name, metric_value)
+        self.batch_cache = []
+        # list of (phase, epoch_idx, metric_name, metric_value)
+        self.epoch_cache = []
+
         self.make_run_dir()
         self.reset()
     
     def make_run_dir(self):
         if not os.path.exists(self.rundir):
-            os.makedirs(self.rundir)
+            os.makedirs(self.rundir, exist_ok=True)
+        print(f"Run directory: {self.rundir}")
 
     def reset(self):
         """Reset all tracked metrics."""
@@ -31,42 +46,33 @@ class SummaryWriter:
     
     def log_hyperparameters(self, params):
         self.params = params
+        self._save_params()
+    
+    def _save_params(self):
+        with open(os.path.join(self.rundir, "hyperparameters.json"), "w") as f:
+            json.dump(self.params, f, indent=4)
 
-    def log_batch_metric(self, metric_name, value):
-        """Log a batch-level metric."""
-        if metric_name not in self.metrics:
-            raise ValueError(f"Metric '{metric_name}' is not being tracked.")
-        self.batch_metrics[metric_name].append(value)
-
-    def log_epoch_metric(self, metric_name, value):
-        """Log an epoch-level metric."""
-        if metric_name not in self.metrics:
-            raise ValueError(f"Metric '{metric_name}' is not being tracked.")
-        self.epoch_metrics[metric_name].append(value)
-
-    def get_batch_average(self, metric_name):
-        """Get the average of a batch-level metric over all logged batches in the current epoch."""
-        values = self.batch_metrics[metric_name]
-        return sum(values) / len(values) if values else 0
-
-    def get_epoch_average(self, metric_name, epoch=None):
+    def log_batch_metrics(self, phase: str, batch_idx: int, metrics_dict: dict):
         """
-        Get the value or average of an epoch-level metric.
-        
-        :param epoch: The specific epoch to retrieve. If None, retrieves the last logged epoch's value.
+        Log batch-level metrics in memory (and store them in an internal cache) for later disk write.
+        Args:
+            phase: 'train', 'val', 'test', etc.
+            batch_idx: index of the current batch
+            metrics_dict: dictionary of metric_name -> value
         """
-        if epoch is None:
-            return self.epoch_metrics[metric_name][-1] if self.epoch_metrics[metric_name] else 0
-        return self.epoch_metrics[metric_name][epoch]
+        for k, v in metrics_dict.items():
+            self.batch_cache.append((phase, batch_idx, k, v))
 
-    def print_epoch_summary(self, epoch):
-        """Print a summary of all tracked metrics for the given epoch."""
-        print(f"Epoch {epoch + 1} Summary:")
-        for metric in self.metrics:
-            avg_value = self.get_batch_average(metric)
-            print(f" - {metric}: {avg_value:.4f}")
-        # Reset batch-level metrics after logging
-        self.batch_metrics = defaultdict(list)
+    def log_epoch_metrics(self, phase: str, epoch_idx: int, metrics_dict: dict):
+        """
+        Log epoch-level metrics in memory (and store them in an internal cache) for later disk write.
+        Args:
+            phase: 'train', 'val', 'test', etc.
+            epoch_idx: index of the current epoch
+            metrics_dict: dictionary of metric_name -> value
+        """
+        for k, v in metrics_dict.items():
+            self.epoch_cache.append((phase, epoch_idx, k, v))
 
     def save_to_file(self):
         """Save the tracked metrics to a JSON file."""
@@ -77,13 +83,54 @@ class SummaryWriter:
                 'batch_metrics': dict(self.batch_metrics)
             }, f, indent=4)
         with open(os.path.join(self.rundir, "hyperparameters.json"), "w") as f:
-            json.dump(self.metrics, f, indent=4)
+            json.dump(self.params, f, indent=4)
 
     def save_figure(self, figure, filename):
         figure.savefig(os.path.join(self.rundir, filename))
     
-    def save_model(self, model):
-        torch.save(model.state_dict(), os.path.join(self.rundir, "model.pth"))
+    def save_model(self, model: torch.nn.Module, epoch_idx: int, filename: str = None):
+        """
+        Save a PyTorch model checkpoint to disk.
+        Args:
+            model: PyTorch model
+            epoch_idx: Current epoch index
+            filename: Custom filename (otherwise uses "model_epoch_{epoch_idx}.pth")
+        """
+        if filename is None:
+            filename = f"model_epoch_{epoch_idx}.pth"
+        save_path = os.path.join(self.rundir, filename)
+        torch.save(model.state_dict(), save_path)
+        print(f"Model saved to {save_path}")
+    
+    def flush(self):
+        is_new_file = not os.path.exists(self.batch_csv_path)
+        with open(self.batch_csv_path, mode="a", newline="") as f:
+            writer = csv.writer(f)
+            if is_new_file:
+                writer.writerow(
+                    ["phase", "batch_idx", "metric_name", "metric_value"])
+
+            while self.batch_cache:
+                phase, batch_idx, metric_name, metric_value = self.batch_cache.pop(
+                    0)
+                writer.writerow(
+                    [phase, batch_idx, metric_name, metric_value])
+        is_new_file = not os.path.exists(self.epoch_csv_path)
+        with open(self.epoch_csv_path, mode="a", newline="") as f:
+            writer = csv.writer(f)
+            if is_new_file:
+                writer.writerow(
+                    ["phase", "epoch_idx", "metric_name", "metric_value"])
+
+            while self.epoch_cache:
+                phase, epoch_idx, metric_name, metric_value = self.epoch_cache.pop(
+                    0)
+                writer.writerow(
+                    [phase, epoch_idx, metric_name, metric_value])
+
+    def close(self):
+        self.flush()
+        print("SummaryWriter closed.")
         
 
 class Timer:
