@@ -161,7 +161,7 @@ class CustomTransformerModel(nn.Module):
         self.embedding = embedding_layer.to(device)
 
         for param in self.embedding.parameters():
-            param.requires_grad = False
+            param.requires_grad = True
 
         self.x_projection.requires_grad = True
         self.y_projection.requires_grad = True
@@ -189,9 +189,8 @@ class CustomTransformerModel(nn.Module):
 
         x_projected = self.x_projection(x_embedded)  # Shape: (batch, seq, projection_dim)
 
-        # Project y_train (scalar or one-hot) to 32D
+        # Ensure y_train in the right dimensions
         y_train = y_train.unsqueeze(-1) if y_train.ndim == 1 else y_train  # Ensure shape (batch, seq, 1)
-        # y_train = y_train.float()
 
         # One-hot encode y_train (batch_size, num_classes * num_images) -> (batch_size, num_images * num_classes, num_classes)
         y_train = F.one_hot(y_train, num_classes=self.num_classes).float()
@@ -200,6 +199,7 @@ class CustomTransformerModel(nn.Module):
         y_train = y_train.view(-1, self.num_classes)
 
         y_projected = self.y_projection(y_train)  # Shape: (batch, seq, projection_dim)
+        
         # Reshape back to (batch, seq, projection_dim)
         y_projected = y_projected.view(x_projected.size(0), x_projected.size(1), -1)
 
@@ -207,7 +207,7 @@ class CustomTransformerModel(nn.Module):
         combined_embedded = torch.cat([x_projected, y_projected], dim=-1)  # Shape: (batch, seq, d_model)
 
         # Applying the same projection to the prediction
-        x_pred_projected = self.x_projection(x_pred_embedded)  # Shape: (batch, seq, 32)
+        x_pred_projected = self.x_projection(x_pred_embedded)  # Shape: (batch, seq, projection_dim)
 
         y_pred_projected = torch.zeros_like(x_pred_projected, device=self.device) -1  # Shape: (batch, seq, projection_dim)
 
@@ -215,8 +215,6 @@ class CustomTransformerModel(nn.Module):
         pred_combined_embedded = torch.cat([x_pred_projected, y_pred_projected], dim=-1)  # Shape: (batch, seq, d_model)
 
         # Concatenate train and prediction embeddings
-        # pred_combined_embedded = pred_combined_embedded.unsqueeze(1)
-
         full_sequence = torch.cat([combined_embedded, pred_combined_embedded], dim=1)  # Shape: (batch, seq+pred_seq, d_model)
 
         # (batch, seq, dim -> seq, batch, dim)
@@ -234,6 +232,7 @@ class CustomTransformerModel(nn.Module):
 
         # Extract the prediction hidden state and compute logits
         prediction_hidden_state = transformer_output[-1, :, :]  # Shape: (batch_size, hidden_dim)
-        # use mean instead
+        # Calculate final logits
         logits = self.fc(prediction_hidden_state)  # Shape: (batch_size, num_classes)
+        
         return logits

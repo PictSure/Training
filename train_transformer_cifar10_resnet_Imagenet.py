@@ -22,7 +22,7 @@ encoder = ResNetWrapper(classifier)
 
 criterion = nn.CrossEntropyLoss(label_smoothing=epsilon)
 
-batch_size = 16
+batch_size = 2
 
 print("Torch precision: ", torch.get_default_dtype())
 
@@ -55,7 +55,7 @@ def train(lr=1e-3, num_epochs=40, num_images=10, batch_size=batch_size):
         if epoch < 30:
             current_lr = initial_lr + (lr - initial_lr) * (epoch / 30)
         elif epoch > 60:
-            current_lr = lr - (lr - target_lr) * ((epoch - 60) / 40)
+            current_lr = lr - (lr - target_lr) * ((epoch - 60) / 60)
         else:
             current_lr = lr
         for param_group in optimizer.param_groups:
@@ -64,6 +64,8 @@ def train(lr=1e-3, num_epochs=40, num_images=10, batch_size=batch_size):
         total_correct = 0
         total_samples = 0
         total_loss = 0
+
+        accumulation_steps = 8  # Number of steps to accumulate gradients
 
         for batch_idx, (images, labels, pred_image, pred_label) in enumerate(tqdm(train_loader, desc=f"Epoch {epoch+1}/{num_epochs}")):
             images, labels, pred_image, pred_label = images.to(device, non_blocking=True), labels.to(device, non_blocking=True), pred_image.to(device, non_blocking=True), pred_label.to(device, non_blocking=True)
@@ -74,13 +76,15 @@ def train(lr=1e-3, num_epochs=40, num_images=10, batch_size=batch_size):
             pred_label = pred_label.view(-1)
             loss = criterion(outputs, pred_label)
             
-            optimizer.zero_grad()
+            loss = loss / accumulation_steps  # Normalize loss to account for gradient accumulation
             loss.backward()
 
-            clip_grad_norm_(model.parameters(), max_norm=0.5)
-            optimizer.step()
+            if (batch_idx + 1) % accumulation_steps == 0:
+                clip_grad_norm_(model.parameters(), max_norm=0.5)
+                optimizer.step()
+                optimizer.zero_grad()
 
-            total_loss += loss.item()
+            total_loss += loss.item() * accumulation_steps  # Multiply back the loss
 
             with torch.no_grad():
                 predicted = torch.argmax(outputs, dim=1)
@@ -88,6 +92,12 @@ def train(lr=1e-3, num_epochs=40, num_images=10, batch_size=batch_size):
                 total = pred_label.size(0)
                 total_correct += correct
                 total_samples += total
+
+        # Ensure the gradients are updated for the last few batches
+        if (batch_idx + 1) % accumulation_steps != 0:
+            clip_grad_norm_(model.parameters(), max_norm=0.5)
+            optimizer.step()
+            optimizer.zero_grad()
 
         total_grad_norm = 0.0
         grad_param_count = 0
@@ -133,7 +143,7 @@ def train(lr=1e-3, num_epochs=40, num_images=10, batch_size=batch_size):
 
 
 learning_rates = [1e-4]
-num_epochs = 100
+num_epochs = 120
 batches_per_epoch = 50000
 
 results = {}
