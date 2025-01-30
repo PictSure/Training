@@ -74,17 +74,6 @@ class SummaryWriter:
         for k, v in metrics_dict.items():
             self.epoch_cache.append((phase, epoch_idx, k, v))
 
-    def save_to_file(self):
-        """Save the tracked metrics to a JSON file."""
-        with open(os.path.join(self.rundir, "metrics.json"), 'w') as f:
-            json.dump({
-                'epoch_metrics': self.epoch_metrics,
-                # Convert defaultdict to regular dict for serialization
-                'batch_metrics': dict(self.batch_metrics)
-            }, f, indent=4)
-        with open(os.path.join(self.rundir, "hyperparameters.json"), "w") as f:
-            json.dump(self.params, f, indent=4)
-
     def save_figure(self, figure, filename):
         figure.savefig(os.path.join(self.rundir, filename))
     

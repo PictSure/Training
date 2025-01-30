@@ -9,11 +9,11 @@ import matplotlib.pyplot as plt
 import pandas as pd
 import os
 
-with open("./configs/slurm.yaml", "r") as f:
+with open("./configs/local.yaml", "r") as f:
     config = yaml.load(f, Loader=yaml.FullLoader)
 
 
-writer = SummaryWriter(directory=config["paths"]["output"], metrics=["loss", "acc"])
+writer = SummaryWriter(directory=config["paths"]["output"])
 
 training_loader = get_cifar10_random_loader(
     root=config["paths"]["dataset"], batch_size=config["dataloader"]["batch_size"], num_classes=config["dataloader"]["num_classes"], num_samples=10000, num_images=10)
@@ -90,8 +90,9 @@ for epoch in range(EPOCHS):
             total_correct += correct
             total_samples += total
             acc = correct / total
-        writer.log_batch_metric("loss", loss.item())
-        writer.log_batch_metric("acc", acc)
+        writer.log_batch_metrics("train", batch_idx, {
+            "loss": loss.item(), "acc": acc
+        })
         progressbar.set_description(
             '[Train] Loss: {:.4f}, Acc: {:.2f} [{:>5d}/{:>5d}]'.format(
                 loss, acc, (batch_idx + 1),
@@ -102,8 +103,6 @@ for epoch in range(EPOCHS):
     progressbar.close()
     avg_loss = total_loss / total_samples
     accuracy = total_correct / total_samples
-    writer.log_epoch_metric("loss", avg_loss)
-    writer.log_epoch_metric("acc", acc)
     losses.append(avg_loss)
     accuracies.append(accuracy)
     total_grad_norm = 0.0
@@ -119,7 +118,10 @@ for epoch in range(EPOCHS):
             epoch+1, EPOCHS, avg_loss, accuracy, avg_grad_norm
         )
     )
-writer.print_metrics()
+    writer.log_epoch_metrics("train", epoch, {
+        "loss": avg_loss, "acc": accuracy, "avg_grad_norm": avg_grad_norm
+    })
+    writer.flush()
 epoch_progress.close()
 writer.save_to_file()
 writer.save_model(model)
