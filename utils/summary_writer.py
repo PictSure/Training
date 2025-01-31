@@ -8,7 +8,7 @@ import torch
 from pprint import pprint
 
 class SummaryWriter:
-    def __init__(self, directory="./runs/", metrics=[]):
+    def __init__(self, directory="./runs/"):
         """
         Initialize the SummaryWriter with metrics to track.
         
