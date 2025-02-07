@@ -4,6 +4,7 @@ import random
 import numpy as np
 from torchvision import transforms, datasets
 import webdataset as wds
+import torch.nn.functional as F
 
 class ImageNetRandomDataset(Dataset):
     """
@@ -19,6 +20,9 @@ class ImageNetRandomDataset(Dataset):
         num_classes=2,
         random_classes=None,
         train=True,
+        excluded_classes=None,
+        included_classes=None,
+        mini=False
     ):
         """
         Initialize the dataset by loading ImageNet.
@@ -37,6 +41,9 @@ class ImageNetRandomDataset(Dataset):
         split = "train" if train else "val"
         self.dataset = datasets.ImageNet(root=root, split=split)
 
+        self.excluded_classes = excluded_classes
+        self.included_classes = included_classes
+
         # Class and target mapping
         self.targets = np.array([label for _, label in self.dataset])  # Targets as numpy array
         self.num_total_classes = len(self.dataset.classes)  # Total number of classes
@@ -48,11 +55,20 @@ class ImageNetRandomDataset(Dataset):
         self.num_classes = num_classes
         self.fixed_classes = random_classes  # Fixed classes if provided
 
-        # Transformation pipeline
-        self.transform = transforms.Compose([
-            transforms.Resize((224, 224)),
-            transforms.ToTensor(),
-        ])
+        if mini:
+            self.transform = transforms.Compose([
+                transforms.Resize((64, 64)),
+                transforms.Resize((224, 224)),
+                transforms.ToTensor(),
+            ])
+        else:
+            # Transformation pipeline
+            self.transform = transforms.Compose([
+                transforms.Resize((224, 224)),
+                transforms.ToTensor(),
+                transforms.GaussianBlur(5, sigma=(0.1, 2.0)),
+                transforms.RandomAdjustSharpness(0.2, 0.2)
+            ])
 
     def __len__(self):
         return self.num_samples
@@ -67,7 +83,13 @@ class ImageNetRandomDataset(Dataset):
         if self.fixed_classes is not None:
             chosen_classes = self.fixed_classes
         else:
-            chosen_classes = random.sample(range(self.num_total_classes), self.num_classes)
+            if self.included_classes is not None:
+                chosen_classes = random.sample(self.included_classes, self.num_classes)
+            elif self.excluded_classes is not None:
+                chosen_classes = [cls for cls in range(self.num_total_classes) if cls not in self.excluded_classes]
+                chosen_classes = random.sample(chosen_classes, self.num_classes)
+            else:
+                chosen_classes = random.sample(range(self.num_total_classes), self.num_classes)
 
         # Gather indices in the dataset for each chosen class
         class_indices = {
@@ -188,3 +210,96 @@ class ImageNetRandomWebDataset(Dataset):
 
     def __len__(self):
         return self.num_samples
+
+def normalize_samples(sampled_images, pred_image, resize=None):
+    """
+    Normalize the input and prediction images to the range [0, 1].
+    
+    Args:
+        sampled_images (torch.Tensor): Batch of sampled images with shape (N, B, C, H, W).
+        pred_image (torch.Tensor): Single prediction image with shape (B, C, H, W).
+        
+    Returns:
+        normalized_sampled_images (torch.Tensor): Normalized sampled images.
+        normalized_pred_image (torch.Tensor): Normalized prediction image.
+    """
+    # Define mean and std for normalization
+    mean = torch.tensor([0.4914, 0.4822, 0.4465], device=sampled_images.device).view(1, -1, 1, 1)
+    std = torch.tensor([0.2023, 0.1994, 0.2010], device=sampled_images.device).view(1, -1, 1, 1)
+    
+    # Get shapes
+    N, B, C, H, W = sampled_images.size()  # sampled_images shape: (N, B, C, H, W)
+    
+    # Reshape sampled_images to (N*B, C, H, W)
+    sampled_images = sampled_images.view(N * B, C, H, W)
+
+    # Normalize between [0, 1]
+    sampled_images = torch.clamp(sampled_images, 0, 255) / 255.0
+    
+    # Normalize sampled_images using mean and std
+    sampled_images = (sampled_images - mean) / std
+    
+    # Normalize pred_image, which has shape (N, C, H, W)
+    pred_image = (pred_image - mean) / std
+
+    # Resize if necessary
+    if resize is not None:
+        # Resize sampled_images (reshaped as (N*B, C, H, W))
+        sampled_images = F.interpolate(sampled_images, size=resize, mode="bilinear", align_corners=False)
+        
+        # Resize pred_image, handling (N, C, H, W)
+        pred_image = F.interpolate(pred_image, size=resize, mode="bilinear", align_corners=False)
+    
+    # Reshape sampled_images back to (N, B, C, H, W)
+    sampled_images = sampled_images.view(N, B, C, resize[0], resize[1]) if resize else sampled_images.view(N, B, C, H, W)
+    
+    return sampled_images, pred_image
+
+
+def get_imagenet_random_loader(
+    root="./data",
+    num_images=10,
+    num_samples=10000,
+    num_classes=2,
+    random_classes=None,
+    train=True,
+    batch_size=32,
+    num_workers=4,
+    exclude_images=None,
+    include_images=None,
+    mini=False
+):
+    """
+    Returns a DataLoader for the ImageNetRandomDataset.
+
+    Args:
+        root (str): Path to ImageNet dataset.
+        num_images (int): Number of images to sample per class.
+        num_samples (int): Total number of samples (length of the dataset).
+        num_classes (int): How many distinct classes to randomly choose for each sample.
+        random_classes (list or None): If provided, use these classes instead of sampling them randomly.
+        train (bool): Whether to load the train or val split.
+        batch_size (int): Batch size.
+        num_workers (int): Number of workers for the DataLoader.
+    """
+    dataset = ImageNetRandomDataset(
+        root=root,
+        num_images=num_images,
+        num_samples=num_samples,
+        num_classes=num_classes,
+        random_classes=random_classes,
+        train=train,
+        excluded_classes=exclude_images,
+        included_classes=include_images,
+        mini=mini
+    )
+
+    loader = torch.utils.data.DataLoader(
+        dataset,
+        batch_size=batch_size,
+        shuffle=True,
+        num_workers=num_workers,
+        pin_memory=True,
+    )
+
+    return loader

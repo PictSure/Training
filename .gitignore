@@ -119,3 +119,4 @@ dmypy.json
 *.pdf
 *.png
 *.jpg
+**.npz
