@@ -1,4 +1,4 @@
-from model.model_cifar import CIFAR10Classifier, EmbeddingWrapper, CustomTransformerModel, ResNetWrapper
+from model.model_cifar import CustomResnetEmbedding, EmbeddingWrapper, CustomTransformerModel, ResNetWrapper
 from utils.data_loader_imagenet import get_imagenet_random_loader, normalize_samples
 import torch
 import torch.nn as nn
@@ -12,13 +12,15 @@ import torchvision.models as models
 from utils.util import count_parameters
 
 device = "cuda"
-num_classes = 10
+num_classes = 5
 epsilon = 0.1
 
 # classifier = models.resnet18(pretrained=True)
-classifier = models.resnet34(pretrained=True)
+# classifier = models.resnet18(pretrained=True)
+classifier = CustomResnetEmbedding()
 
-encoder = ResNetWrapper(classifier)
+# encoder = ResNetWrapper(classifier)
+encoder = EmbeddingWrapper(classifier)
 
 criterion = nn.CrossEntropyLoss(label_smoothing=epsilon)
 
@@ -28,7 +30,7 @@ print("Torch precision: ", torch.get_default_dtype())
 
 def train(lr=1e-3, num_epochs=40, num_images=10, batch_size=batch_size):
     initial_lr = 1e-6  # Start with a smaller learning rate
-    target_lr = 1e-6
+    target_lr = 1e-7
     model = CustomTransformerModel(encoder, num_classes, device)
     model = model.to(device)
     optimizer = optim.AdamW(model.parameters(), lr=initial_lr, weight_decay=1e-5)
@@ -42,10 +44,11 @@ def train(lr=1e-3, num_epochs=40, num_images=10, batch_size=batch_size):
     # Print the number of parameters, but with . notation for better readability
     print(f"Total parameters: {total_params:,}, Trainable parameters: {trainable_params:,}, Share of trainable: {trainable_params / total_params:.2%}")
 
-    print("Loading training data")
-    train_loader = get_imagenet_random_loader(batch_size=batch_size, num_classes=num_classes, num_samples=10000, num_images=num_images, train=True)
-    test_loader = get_imagenet_random_loader(batch_size=batch_size, num_classes=num_classes, num_samples=100, num_images=num_images, train=False)
+    test_classes = [87, 155, 178, 181, 199, 217, 284, 321, 452, 469, 483, 541, 574, 753, 777, 788, 826, 927, 946]
 
+    print("Loading training data")
+    train_loader = get_imagenet_random_loader(batch_size=batch_size, num_classes=num_classes, num_samples=10000, num_images=num_images, train=True, exclude_images=test_classes, mini=False)
+    test_loader = get_imagenet_random_loader(batch_size=batch_size, num_classes=num_classes, num_samples=200, num_images=num_images, train=True, include_images=test_classes, mini=True)
 
     print("Starting training")
     start_time = time.time()
@@ -54,8 +57,8 @@ def train(lr=1e-3, num_epochs=40, num_images=10, batch_size=batch_size):
         # Linear ramp up of learning rate only over the first 10 epochs
         if epoch < 30:
             current_lr = initial_lr + (lr - initial_lr) * (epoch / 30)
-        elif epoch > 60:
-            current_lr = lr - (lr - target_lr) * ((epoch - 60) / 60)
+        elif epoch > 150:
+            current_lr = lr - (lr - target_lr) * ((epoch - 60) / 150)
         else:
             current_lr = lr
         for param_group in optimizer.param_groups:
@@ -138,19 +141,19 @@ def train(lr=1e-3, num_epochs=40, num_images=10, batch_size=batch_size):
         print(f"Estimated time left: {remaining_time // 60:.0f} minutes {remaining_time % 60:.0f} seconds")
 
     # Save the model
-    torch.save(model.state_dict(), f"model/transformer_cifar_{num_images}.pth")
+    torch.save(model.state_dict(), f"model/transformer_cifar_{num_images}_self_trained.pth")
     return avg_loss, accuracy, losses, accuracies, test_accuracies
 
 
 learning_rates = [1e-4]
-num_epochs = 120
+num_epochs = 300
 batches_per_epoch = 50000
 
 results = {}
 
 plt.figure(figsize=(10, 6))
 for batch_size, lr in [(16, 1e-4)]:
-    avg_loss, accuracy, losses, accuracies, test_accuracies = train(lr=lr, num_epochs=num_epochs, batch_size=batch_size, num_images=10)
+    avg_loss, accuracy, losses, accuracies, test_accuracies = train(lr=lr, num_epochs=num_epochs, batch_size=batch_size, num_images=5)
 
     smoothed_losses = pd.Series(losses).rolling(window=2).mean()
     smoothed_accuracies = pd.Series(accuracies).rolling(window=2).mean()
@@ -166,4 +169,4 @@ plt.ylabel('Accuracy')
 plt.title('Accuracy vs. Epoch for different batch sizes')
 plt.legend()
 plt.grid(True)
-plt.savefig("10_classes_comparison.pdf")
+plt.savefig("5_classes_comparison_self_trained.pdf")

@@ -41,41 +41,46 @@ class BasicBlock(nn.Module):
         out = self.relu(out)
         return out
 
-class CIFAR100Classifier(nn.Module):
+class CustomResnetEmbedding(nn.Module):
     def __init__(self, num_classes=100):
-        super(CIFAR100Classifier, self).__init__()
+        super(CustomResnetEmbedding, self).__init__()
         
         # 1) Pre-processing layers: 
         #    - Initial conv + batchnorm + ReLU
         #    - Stack of BasicBlocks
         #    - Final global average pooling
         self.pre_processing = nn.Sequential(
-            nn.Conv2d(3, 32, kernel_size=3, stride=1, padding=1, bias=False),
-            nn.BatchNorm2d(32),
+            nn.Conv2d(3, 64, kernel_size=7, stride=2, padding=3, bias=False),
+            nn.BatchNorm2d(64),
             nn.ReLU(inplace=True),
+            nn.MaxPool2d(kernel_size=3, stride=2, padding=1),
             
-            BasicBlock(32, 32, stride=1),
-            BasicBlock(32, 32, stride=1),
-            
-            BasicBlock(32, 64, stride=2),
+            BasicBlock(64, 64, stride=1),
             BasicBlock(64, 64, stride=1),
             
             BasicBlock(64, 128, stride=2),
             BasicBlock(128, 128, stride=1),
+            
+            BasicBlock(128, 256, stride=2),
+            BasicBlock(256, 256, stride=1),
+            
+            BasicBlock(256, 512, stride=2),
+            BasicBlock(512, 512, stride=1),
+
+            BasicBlock(512, 512, stride=2),
+            BasicBlock(512, 1024, stride=1),
 
             nn.AdaptiveAvgPool2d((1, 1)),
             nn.Flatten()
         )
         
-        # 2) Final classification layer
-        self.fc = nn.Linear(128, num_classes)
+        # 2) Final embedding layer
+        self.fc = nn.Linear(1024, 1024)
         
     def forward(self, x):
         # Pre-processing: feature extraction
         out = self.pre_processing(x)
-        # Flatten after the global average pool
-        # out = out.view(out.size(0), -1)
-        # Classification
+        # Embedding
         out = self.fc(out)
         return out
 
@@ -112,16 +117,14 @@ class EmbeddingWrapper(nn.Module):
     def __init__(self, classifier):
         super(EmbeddingWrapper, self).__init__()
         self.classifier = classifier
-        self.latent_dim = 128
-        self.normalize = transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010))  # Normalize using CIFAR-10 stats
+        self.latent_dim = 1024
 
     def forward(self, x):
         # (batch, num_images, 3, 32, 32) -> (batch * num_images, 3, 32, 32)
         num_images = x.size(1)
         batch_size = x.size(0)
 
-        x = x.view(-1, 3, 32, 32)
-        x = self.normalize(x)
+        x = x.view(-1, 3, 224, 224)
         x = self.classifier.pre_processing(x)
 
         # (batch * num_images, 256) -> (batch, num_images, 256)
@@ -151,7 +154,7 @@ class CustomTransformerModel(nn.Module):
         self.transformer_layer = nn.TransformerEncoderLayer(
             d_model=1024, nhead=8, dim_feedforward=2048, norm_first=True
         )
-        self.transformer = nn.TransformerEncoder(self.transformer_layer, num_layers=6).to(device)
+        self.transformer = nn.TransformerEncoder(self.transformer_layer, num_layers=4).to(device)
         self.fc = nn.Linear(1024, num_classes).to(device)
         self.device = device
         self._init_weights()
@@ -199,7 +202,7 @@ class CustomTransformerModel(nn.Module):
         y_train = y_train.view(-1, self.num_classes)
 
         y_projected = self.y_projection(y_train)  # Shape: (batch, seq, projection_dim)
-        
+
         # Reshape back to (batch, seq, projection_dim)
         y_projected = y_projected.view(x_projected.size(0), x_projected.size(1), -1)
 

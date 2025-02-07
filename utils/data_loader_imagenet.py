@@ -19,6 +19,9 @@ class ImageNetRandomDataset(Dataset):
         num_classes=2,
         random_classes=None,
         train=True,
+        excluded_classes=None,
+        included_classes=None,
+        mini=False
     ):
         """
         Initialize the dataset by loading ImageNet.
@@ -37,6 +40,9 @@ class ImageNetRandomDataset(Dataset):
         split = "train" if train else "val"
         self.dataset = datasets.ImageNet(root=root, split=split)
 
+        self.excluded_classes = excluded_classes
+        self.included_classes = included_classes
+
         # Class and target mapping
         self.targets = np.array([label for _, label in self.dataset])  # Targets as numpy array
         self.num_total_classes = len(self.dataset.classes)  # Total number of classes
@@ -48,11 +54,20 @@ class ImageNetRandomDataset(Dataset):
         self.num_classes = num_classes
         self.fixed_classes = random_classes  # Fixed classes if provided
 
-        # Transformation pipeline
-        self.transform = transforms.Compose([
-            transforms.Resize((224, 224)),
-            transforms.ToTensor(),
-        ])
+        if mini:
+            self.transform = transforms.Compose([
+                transforms.Resize((64, 64)),
+                transforms.Resize((224, 224)),
+                transforms.ToTensor(),
+            ])
+        else:
+            # Transformation pipeline
+            self.transform = transforms.Compose([
+                transforms.Resize((224, 224)),
+                transforms.ToTensor(),
+                transforms.GaussianBlur(5, sigma=(0.1, 2.0)),
+                transforms.RandomAdjustSharpness(0.2, 0.2)
+            ])
 
     def __len__(self):
         return self.num_samples
@@ -67,7 +82,13 @@ class ImageNetRandomDataset(Dataset):
         if self.fixed_classes is not None:
             chosen_classes = self.fixed_classes
         else:
-            chosen_classes = random.sample(range(self.num_total_classes), self.num_classes)
+            if self.included_classes is not None:
+                chosen_classes = random.sample(self.included_classes, self.num_classes)
+            elif self.excluded_classes is not None:
+                chosen_classes = [cls for cls in range(self.num_total_classes) if cls not in self.excluded_classes]
+                chosen_classes = random.sample(chosen_classes, self.num_classes)
+            else:
+                chosen_classes = random.sample(range(self.num_total_classes), self.num_classes)
 
         # Gather indices in the dataset for each chosen class
         class_indices = {
@@ -159,6 +180,9 @@ def get_imagenet_random_loader(
     train=True,
     batch_size=32,
     num_workers=4,
+    exclude_images=None,
+    include_images=None,
+    mini=False
 ):
     """
     Returns a DataLoader for the ImageNetRandomDataset.
@@ -180,6 +204,9 @@ def get_imagenet_random_loader(
         num_classes=num_classes,
         random_classes=random_classes,
         train=train,
+        excluded_classes=exclude_images,
+        included_classes=include_images,
+        mini=mini
     )
 
     loader = torch.utils.data.DataLoader(
