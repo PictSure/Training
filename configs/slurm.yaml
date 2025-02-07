@@ -1,6 +1,6 @@
 paths:
   output: /netscratch/schiesser/embed_then_cat/runs/
-  dataset: /netscratch/schiesser/embed_then_cat/ds/
+  dataset:/netscratch/schiesser/webdataset_shards/imagenet-train
 
 model:
   lr: 0.001
