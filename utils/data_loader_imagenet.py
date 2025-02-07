@@ -3,6 +3,7 @@ import torch
 import random
 import numpy as np
 from torchvision import transforms, datasets
+import webdataset as wds
 
 class ImageNetRandomDataset(Dataset):
     """
@@ -102,3 +103,88 @@ class ImageNetRandomDataset(Dataset):
         sampled_labels_torch = torch.tensor(sampled_labels, dtype=torch.long)  # Shape: (num_classes * num_images,)
 
         return sampled_images_torch, sampled_labels_torch, pred_image_torch, torch.tensor(pred_label, dtype=torch.long)
+    
+class ImageNetRandomWebDataset(Dataset):
+    def __init__(
+            self,
+            shard_pattern="/imagenet-train/imagenet-train-{00000..00125}.tar",
+            num_images=10,
+            num_samples=10000,
+            num_classes=2,
+            random_classes=None):
+        super().__init__()
+
+        self.shard_pattern = shard_pattern
+        self.num_images = num_images
+        self.num_samples = num_samples
+        self.num_classes = num_classes
+        self.fixed_classes = random_classes  # Fixed classes if provided
+
+        self.transform = transforms.Compose([
+            transforms.Resize((224, 224)),
+            transforms.ToTensor(),
+        ])
+
+        # Load dataset and cache class-to-index mapping
+        self.dataset = wds.WebDataset(self.shard_pattern).decode(
+            "pil").to_tuple("jpg", "cls")
+        self.class_to_samples = self._build_class_index()
+
+        # Total classes in dataset
+        self.num_total_classes = len(self.class_to_samples.keys())
+
+    def _build_class_index(self):
+        """
+        Build an index mapping each class to its list of images.
+        """
+        class_to_samples = {}
+        for img, cls in self.dataset:
+            cls_name = cls.decode('utf-8')  # Convert class label to string
+            if cls_name not in class_to_samples:
+                class_to_samples[cls_name] = []
+            class_to_samples[cls_name].append(img)
+        return class_to_samples
+    
+    def __iter__(self):
+        for _ in range(self.num_samples):
+            # Select classes (fixed or random)
+            if self.fixed_classes is not None:
+                chosen_classes = self.fixed_classes
+            else:
+                chosen_classes = random.sample(
+                    list(self.class_to_samples.keys()), self.num_classes)
+
+            sampled_images = []
+            sampled_labels = []
+            class_to_label = {}
+
+            # Sample images from chosen classes
+            for label_idx, cls in enumerate(chosen_classes):
+                available_images = self.class_to_samples[cls]
+                chosen_images = random.sample(
+                    available_images, self.num_images)
+
+                for img in chosen_images:
+                    img_transformed = self.transform(img)
+                    sampled_images.append(img_transformed)
+                    sampled_labels.append(label_idx)
+
+                class_to_label[cls] = label_idx
+
+            # Randomly pick a prediction image from one of the chosen classes
+            pred_class = random.choice(chosen_classes)
+            pred_image = random.choice(self.class_to_samples[pred_class])
+            pred_image_torch = self.transform(pred_image)
+            pred_label = class_to_label[pred_class]
+
+            # Stack sampled images and labels
+            # Shape: (num_classes * num_images, C, H, W)
+            sampled_images_torch = torch.stack(sampled_images)
+            # Shape: (num_classes * num_images,)
+            sampled_labels_torch = torch.tensor(
+                sampled_labels, dtype=torch.long)
+
+            yield sampled_images_torch, sampled_labels_torch, pred_image_torch, torch.tensor(pred_label, dtype=torch.long)
+
+    def __len__(self):
+        return self.num_samples
