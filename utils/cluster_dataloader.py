@@ -28,7 +28,7 @@ class ImageNetDataDingsSet(Dataset):
         self.train = train
         self.excluded_classes = excluded_classes
         self.included_classes = included_classes
-        dataset = MsgpackReader(self.data_path)
+        self.dataset = MsgpackReader(self.data_path)
         self.class_index = self._build_class_index()
         self.fixed_classes = random_classes
         self.num_total_classes = len(self.class_index.keys())
@@ -51,8 +51,8 @@ class ImageNetDataDingsSet(Dataset):
     
     def _build_class_index(self):
         data_dict = defaultdict(list)
-        for i in range(len(dataset)):
-            sample = dataset[i]
+        for i in range(len(self.dataset)):
+            sample = self.dataset[i]
             data_dict[sample["label"]].append(i)
         return data_dict
     
@@ -84,7 +84,7 @@ class ImageNetDataDingsSet(Dataset):
             chosen_indices = np.random.choice(available_indices, self.num_images, replace=False)
 
             for idx in chosen_indices:
-                sample = dataset[idx]
+                sample = self.dataset[idx]
                 sampled_images.append(self.transform(sample["image"]))
                 sampled_labels.append(label_idx)
             class_to_label[cls] = label_idx
@@ -92,7 +92,7 @@ class ImageNetDataDingsSet(Dataset):
         pred_class = random.choice(chosen_classes)
         pred_indices = self.class_index[pred_class]
         pred_index = np.random.choice(pred_indices, 1, replace=False)[0]
-        pred_sample = dataset[pred_index]
+        pred_sample = self.dataset[pred_index]
         pred_image_torch = self.transform(pred_sample["image"])
         pred_label = class_to_label[pred_class]
         # Shape: (num_classes * num_images, C, H, W)
