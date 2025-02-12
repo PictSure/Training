@@ -1,3 +1,5 @@
+training_loc: "local"
+
 paths:
   output: output/
   dataset: data/

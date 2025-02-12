@@ -1,0 +1,20 @@
+training_loc:
+
+paths:
+  output:
+  dataset:
+
+model:
+  lr_initial:
+  lr_target:
+  lr:
+  epochs:
+  log_step:
+  epsilon:
+  acc_steps:
+
+dataloader:
+  num_samples:
+  batch_size:
+  num_classes:
+  num_images:

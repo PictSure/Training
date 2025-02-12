@@ -1,6 +1,8 @@
+training_loc: "cluster"
+
 paths:
   output: /netscratch/schiesser/embed_then_cat/runs/
-  dataset:/netscratch/schiesser/webdataset_shards/imagenet-train
+  dataset: /ds/images/ILSVRC12/train.msgpack
 
 model:
   lr: 0.001

@@ -58,7 +58,7 @@ def train(lr=1e-3, num_epochs=40, num_images=10, batch_size=batch_size):
         if epoch < 30:
             current_lr = initial_lr + (lr - initial_lr) * (epoch / 30)
         elif epoch > 150:
-            current_lr = lr - (lr - target_lr) * ((epoch - 60) / 150)
+            current_lr = lr - (lr - target_lr) * ((epoch - 150) / 150)
         else:
             current_lr = lr
         for param_group in optimizer.param_groups:
