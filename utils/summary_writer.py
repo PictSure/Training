@@ -14,16 +14,15 @@ class SummaryWriter:
         
         :param metrics: Names of metrics to track as strings.
         """
-        self.metrics = set(metrics)
         self.pardir = directory
         self.rundir = os.path.join(
             directory, datetime.now().strftime('%Y%m%d_%H%M%S'))
         self.params = dict()
         self.batch_csv_path = os.path.join(
-            self.run_dir, "batch_metrics.csv"
+            self.rundir, "batch_metrics.csv"
         )
         self.epoch_csv_path = os.path.join(
-            self.run_dir, "epoch_metrics.csv"
+            self.rundir, "epoch_metrics.csv"
         )
         # Internal caches to hold metrics until flush
         # list of (phase, batch_idx, metric_name, metric_value)
@@ -32,17 +31,12 @@ class SummaryWriter:
         self.epoch_cache = []
 
         self.make_run_dir()
-        self.reset()
     
     def make_run_dir(self):
         if not os.path.exists(self.rundir):
             os.makedirs(self.rundir, exist_ok=True)
         print(f"Run directory: {self.rundir}")
 
-    def reset(self):
-        """Reset all tracked metrics."""
-        self.epoch_metrics = {metric: [] for metric in self.metrics}
-        self.batch_metrics = defaultdict(list)
     
     def log_hyperparameters(self, params):
         self.params = params
@@ -153,31 +147,4 @@ class Timer:
     def reset(self):
         self.start_time = None
         self.end_time = None
-
-# Example usage
-# if __name__ == "__main__":
-#     tracker = SummaryWriter(['loss', 'accuracy'])
-    
-#     for epoch in range(10):
-#         timer = Timer()
-#         timer.start()
-        
-#         tracker.reset()  # Reset batch metrics at the start of each epoch
-#         for batch in range(20):  # Assume 20 batches per epoch
-#             loss = 0.5 - 0.02 * batch  # Simulated loss decreasing with batches
-#             accuracy = 0.1 + 0.04 * batch  # Simulated accuracy increasing with batches
-#             tracker.log_batch_metric('loss', loss)
-#             tracker.log_batch_metric('accuracy', accuracy)
-
-#         epoch_loss = tracker.get_batch_average('loss')
-#         epoch_accuracy = tracker.get_batch_average('accuracy')
-#         tracker.log_epoch_metric('loss', epoch_loss)
-#         tracker.log_epoch_metric('accuracy', epoch_accuracy)
-
-#         timer.stop()
-#         print(f"Epoch {epoch + 1} completed in {timer.elapsed_time():.2f}s.")
-#         tracker.print_epoch_summary(epoch)
-
-#     # Save metrics to a file
-#     tracker.save_to_file()
             
