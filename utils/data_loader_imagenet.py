@@ -5,7 +5,7 @@ import numpy as np
 from torchvision import transforms, datasets
 import webdataset as wds
 import torch.nn.functional as F
-from cluster_dataloader import ImageNetDataDingsSet, ImageNetDataDingsSet2
+from utils.cluster_dataloader import ImageNetDataDingsSet, ImageNetDataDingsSet2
 
 class ImageNetRandomDataset(Dataset):
     """
@@ -255,7 +255,7 @@ def get_cluster_random_loader(
     """
     if num_workers > 0:
         dataset = ImageNetDataDingsSet2(
-            root=root,
+            data_path=root,
             num_images=num_images,
             num_samples=num_samples,
             num_classes=num_classes,
@@ -267,7 +267,7 @@ def get_cluster_random_loader(
         )
     else:
         dataset = ImageNetDataDingsSet(
-            root=root,
+            data_path=root,
             num_images=num_images,
             num_samples=num_samples,
             num_classes=num_classes,
