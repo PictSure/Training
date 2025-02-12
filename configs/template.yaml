@@ -1,14 +1,21 @@
 training_loc:
 
+resnet: 
+
 paths:
   output:
   dataset:
 
 model:
+  nheads:
+  nlayers:
+
+optimizer:
   lr_initial:
   lr_target:
   lr:
   epochs:
+  weight_decay:
   log_step:
   epsilon:
   acc_steps:

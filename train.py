@@ -1,7 +1,7 @@
 import torch
 from utils.data_loader_imagenet import get_cluster_random_loader, normalize_samples
 from utils.util import count_parameters
-from model.model_cifar import CustomTransformerModel, EmbeddingWrapper, CIFAR10Classifier
+from model.model_cifar import CustomTransformerModel, EmbeddingWrapper, ResNetWrapper
 from utils.summary_writer import SummaryWriter
 from torch.nn.utils import clip_grad_norm_
 import yaml
@@ -27,9 +27,9 @@ test_classes = [87, 155, 178, 181, 199, 217, 284, 321,
                 452, 469, 483, 541, 574, 753, 777, 788, 826, 927, 946]
 print("Creating dataloader")
 training_loader = get_cluster_random_loader(
-    root=config["paths"]["dataset"], batch_size=config["dataloader"]["batch_size"], num_classes=config["dataloader"]["num_classes"], num_samples=config["dataloader"]["num_samples"], num_images=config["dataloader"["num_images"]], exclude_images=test_classes, mini=False)
+    root=config["paths"]["dataset"], batch_size=config["dataloader"]["batch_size"], num_classes=config["dataloader"]["num_classes"], num_samples=10000, num_images=config["dataloader"]["num_images"], exclude_images=test_classes, mini=False, num_workers=0)
 test_loader = get_cluster_random_loader(
-    root=config["paths"]["dataset"], batch_size=config["dataloader"]["batch_size"], num_classes=config["dataloader"]["num_classes"], num_samples=config["dataloader"]["num_samples"], num_images=config["dataloader"["num_images"]], include_images=test_classes, mini=True)
+    root=config["paths"]["dataset"], batch_size=config["dataloader"]["batch_size"], num_classes=config["dataloader"]["num_classes"], num_samples=200, num_images=config["dataloader"]["num_images"], include_images=test_classes, mini=True, num_workers=0)
 print("DataLoader created")
 
 device = (
@@ -43,23 +43,29 @@ device = (
 print(f"Using {device} device")
 
 
-EPOCHS = config["model"]["epochs"]
-# load autoencoder
-classifier_path = "./weights/cifar10_model.pth"
-# load autoencoder
-classifier = CIFAR10Classifier()
-classifier.load_state_dict(torch.load(classifier_path))
-classifier.to(device)
-classifier.eval()
-encoder = EmbeddingWrapper(classifier)
+EPOCHS = config["optimizer"]["epochs"]
 
-model = CustomTransformerModel(encoder, config["dataloader"]["num_classes"], device=device)
+classifier = (
+    models.resnet18(pretrained=True)
+    if config["resnet"] == 18
+    else models.resnet34(pretrained=True)
+    if config["resnet"] == 34
+    else models.resnet50(pretrained=True)
+)
+encoder = ResNetWrapper(classifier)
+
+model = CustomTransformerModel(encoder, config["dataloader"]
+                               ["num_classes"], nheads=config["model"]["nheads"], nlayer=config["model"]["nlayers"], device=device)
+print("Model created")
 model.to(device)
-loss_fn = torch.nn.CrossEntropyLoss(label_smoothing=config["model"]["epsilon"])
-lr = config["model"]["lr"]
-target_lr = config["model"]["lr_target"]
-initial_lr = config["model"]["lr_initial"]
-optimizer = torch.optim.AdamW(model.parameters(), lr=initial_lr, weight_decay=config["model"]["weight_decay"])
+total_params, trainable_params = count_parameters(model)
+# Print the number of parameters, but with . notation for better readability
+print(f"Total parameters: {total_params:,}, Trainable parameters: {trainable_params:,}, Share of trainable: {trainable_params / total_params:.2%}")
+loss_fn = torch.nn.CrossEntropyLoss(label_smoothing=config["optimizer"]["epsilon"])
+lr = config["optimizer"]["lr"]
+target_lr = config["optimizer"]["lr_target"]
+initial_lr = config["optimizer"]["lr_initial"]
+optimizer = torch.optim.AdamW(model.parameters(), lr=initial_lr, weight_decay=config["optimizer"]["weight_decay"])
 
 losses = []
 accuracies = []
@@ -81,22 +87,25 @@ for epoch in range(EPOCHS):
     total_correct = 0
     total_samples = 0
     total_loss = 0
-    
+
     model.train(True)
     size = len(training_loader.dataset)
     progressbar = trange(len(training_loader), leave=False)
     for batch_idx, (images, labels, pred_image, pred_label) in enumerate(training_loader):
         images, labels, pred_image, pred_label = images.to(device, non_blocking=True), labels.to(
             device, non_blocking=True), pred_image.to(device, non_blocking=True), pred_label.to(device, non_blocking=True)
+        images, pred_image = normalize_samples(
+            images, pred_image, resize=(224, 224))
+
         outputs = model.forward(images, labels, pred_image)
 
         pred_label = pred_label.view(-1)
         loss = loss_fn(outputs, pred_label)
 
-        loss = loss / config["model"]["acc_steps"]
+        loss = loss / config["optimizer"]["acc_steps"]
         loss.backward()         # Backpropagation
 
-        if (batch_idx + 1) % config["model"]["acc_steps"] == 0:
+        if (batch_idx + 1) % config["optimizer"]["acc_steps"] == 0:
 
             clip_grad_norm_(model.parameters(), max_norm=0.5)
             optimizer.step()        # Update parameters
@@ -123,7 +132,7 @@ for epoch in range(EPOCHS):
         progressbar.update()
     progressbar.close()
 
-    if (batch_idx + 1) % config["model"]["acc_steps"] != 0:
+    if (batch_idx + 1) % config["optimizer"]["acc_steps"] != 0:
         clip_grad_norm_(model.parameters(), max_norm=0.5)
         optimizer.step()
         optimizer.zero_grad()
@@ -177,21 +186,22 @@ writer.save_model(model)
 
 smoothed_losses = pd.Series(losses).rolling(window=4).mean()
 smoothed_accuracies = pd.Series(accuracies).rolling(window=4).mean()
+smoothed_test_accuracies = pd.Series(test_accuracies).rolling(window=2).mean()
 
 fig, ax1 = plt.subplots(figsize=(10, 5))
 
 ax1.set_xlabel('Batch')
 ax1.set_ylabel('Loss', color='tab:blue')
-ax1.plot(smoothed_losses, label='Loss', color='tab:blue')
+ax1.plot(smoothed_accuracies, label='Loss', color='tab:blue')
 ax1.tick_params(axis='y', labelcolor='tab:blue')
 
 ax2 = ax1.twinx()
 ax2.set_ylabel('Accuracy', color='tab:orange')
-ax2.plot(smoothed_accuracies, label='Accuracy', color='tab:orange')
+ax2.plot(smoothed_test_accuracies, label='Test Accuracy', color='tab:orange')
 ax2.tick_params(axis='y', labelcolor='tab:orange')
 
 fig.tight_layout()
-fig.suptitle('Loss and Accuracy per Epoch')
+fig.suptitle('Accuracy vs. Epoch for different batch sizes')
 ax1.grid(True)
 
 writer.save_figure(fig, "train_loss_acc.jpg")
