@@ -1,5 +1,5 @@
-from model.model_cifar import CustomResnetEmbedding, EmbeddingWrapper, CustomTransformerModel, ResNetWrapper
-# from model.model_PictSure_M import CustomTransformerModel, ResNetWrapper
+# from model.model_cifar import CustomResnetEmbedding, EmbeddingWrapper, CustomTransformerModel, ResNetWrapper
+from model.model_PictSure_M import CustomTransformerModel, ResNetWrapper
 from utils.data_loader_imagenet import get_imagenet_random_loader, normalize_samples
 import torch
 import torch.nn as nn
@@ -12,13 +12,13 @@ import time
 import torchvision.models as models
 from utils.util import count_parameters
 
-device = "cuda"
+device = "cuda:1"
 num_classes = 5
 epsilon = 0.1
 
 # classifier = models.resnet18(pretrained=True)
-classifier = models.resnet18(pretrained=True)
-# classifier = models.resnet34(pretrained=True)
+# classifier = models.resnet18(pretrained=True)
+classifier = models.resnet34(pretrained=True)
 # classifier = CustomResnetEmbedding()
 
 encoder = ResNetWrapper(classifier)
@@ -26,7 +26,7 @@ encoder = ResNetWrapper(classifier)
 
 criterion = nn.CrossEntropyLoss(label_smoothing=epsilon)
 
-batch_size = 16
+batch_size = 2
 
 print("Torch precision: ", torch.get_default_dtype())
 
@@ -70,7 +70,7 @@ def train(lr=1e-3, num_epochs=40, num_images=10, batch_size=batch_size):
         total_samples = 0
         total_loss = 0
 
-        accumulation_steps = 1  # Number of steps to accumulate gradients
+        accumulation_steps = 8  # Number of steps to accumulate gradients
 
         for batch_idx, (images, labels, pred_image, pred_label) in enumerate(tqdm(train_loader, desc=f"Epoch {epoch+1}/{num_epochs}")):
             images, labels, pred_image, pred_label = images.to(device, non_blocking=True), labels.to(device, non_blocking=True), pred_image.to(device, non_blocking=True), pred_label.to(device, non_blocking=True)
@@ -143,7 +143,7 @@ def train(lr=1e-3, num_epochs=40, num_images=10, batch_size=batch_size):
 
     # Save the model
     model.eval()
-    torch.save(model.state_dict(), f"model/model_PictSure_S.pth")
+    torch.save(model.state_dict(), f"model/model_PictSure_M.pth")
     return avg_loss, accuracy, losses, accuracies, test_accuracies
 
 
@@ -171,8 +171,8 @@ plt.ylabel('Accuracy')
 plt.title('Accuracy vs. Epoch for different batch sizes')
 plt.legend()
 plt.grid(True)
-plt.savefig("5_shot_PictSure_S.pdf")
+plt.savefig("5_shot_PictSure_M.pdf")
 
 # Save the losses and accuracies in a CSV file
 df = pd.DataFrame(results)
-df.to_csv("5_shot_PictSure_S.csv")
+df.to_csv("5_shot_PictSure_M.csv")

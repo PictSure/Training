@@ -4,6 +4,9 @@ import random
 import numpy as np
 from torchvision import transforms, datasets
 import torch.nn.functional as F
+import torchvision.transforms.functional as TF
+from collections import defaultdict
+from PIL import Image
 
 class ImageNetRandomDataset(Dataset):
     """
@@ -44,7 +47,7 @@ class ImageNetRandomDataset(Dataset):
         self.included_classes = included_classes
 
         # Class and target mapping
-        self.targets = np.array([label for _, label in self.dataset])  # Targets as numpy array
+        self.class_index = self._build_class_index()
         self.num_total_classes = len(self.dataset.classes)  # Total number of classes
         self.class_to_idx = self.dataset.class_to_idx
 
@@ -65,9 +68,13 @@ class ImageNetRandomDataset(Dataset):
             self.transform = transforms.Compose([
                 transforms.Resize((224, 224)),
                 transforms.ToTensor(),
-                transforms.GaussianBlur(5, sigma=(0.1, 2.0)),
-                transforms.RandomAdjustSharpness(0.2, 0.2)
             ])
+
+    def _build_class_index(self):
+        class_to_images = defaultdict(list)
+        for img_path, label in self.dataset.samples:
+            class_to_images[label].append(img_path)
+        return class_to_images
 
     def __len__(self):
         return self.num_samples
@@ -90,32 +97,28 @@ class ImageNetRandomDataset(Dataset):
             else:
                 chosen_classes = random.sample(range(self.num_total_classes), self.num_classes)
 
-        # Gather indices in the dataset for each chosen class
-        class_indices = {
-            cls: np.where(self.targets == cls)[0] for cls in chosen_classes
-        }
-
         sampled_images = []
         sampled_labels = []
 
         # For each chosen class, sample images
         class_to_label = {}
         for label_idx, cls in enumerate(chosen_classes):
-            available_indices = class_indices[cls]
-            chosen_indices = np.random.choice(available_indices, self.num_images, replace=False)
+            available_images = self.class_index[cls]
+            chosen_images = np.random.choice(available_images, self.num_images, replace=False)
 
-            for idx in chosen_indices:
-                image, _ = self.dataset[idx]
+            for img_path in chosen_images:
+                image = Image.open(img_path).convert("RGB")
                 sampled_images.append(self.transform(image))
                 sampled_labels.append(label_idx)
+
 
             class_to_label[cls] = label_idx
 
         # Randomly pick a prediction image from one of the chosen classes
         pred_class = random.choice(chosen_classes)
-        pred_indices = class_indices[pred_class]
-        pred_index = np.random.choice(pred_indices, 1, replace=False)[0]
-        pred_image, _ = self.dataset[pred_index]
+        pred_images = self.class_index[pred_class]
+        pred_img_path = np.random.choice(pred_images, 1, replace=False)[0]
+        pred_image = Image.open(pred_img_path).convert("RGB")
         pred_image_torch = self.transform(pred_image)
         pred_label = class_to_label[pred_class]
 
@@ -126,7 +129,7 @@ class ImageNetRandomDataset(Dataset):
         return sampled_images_torch, sampled_labels_torch, pred_image_torch, torch.tensor(pred_label, dtype=torch.long)
     
 
-def normalize_samples(sampled_images, pred_image, resize=None):
+def normalize_samples(sampled_images, pred_image, gaussian=False, sharpness=False, resize=None):
     """
     Normalize the input and prediction images to the range [0, 1].
     
@@ -149,8 +152,21 @@ def normalize_samples(sampled_images, pred_image, resize=None):
     sampled_images = sampled_images.view(N * B, C, H, W)
 
     # Normalize between [0, 1]
-    sampled_images = torch.clamp(sampled_images, 0, 255) / 255.0
-    
+    # sampled_images = torch.clamp(sampled_images, 0, 255) / 255.0
+
+    if gaussian:
+        # Implement the equivalent to transforms.GaussianBlur(5, sigma=(0.1, 2.0)),
+        kernel_size = 5
+        sigma = random.uniform(0.1, 2.0)
+        sampled_images = TF.gaussian_blur(sampled_images, kernel_size=kernel_size, sigma=sigma)
+        pred_image = TF.gaussian_blur(pred_image, kernel_size=kernel_size, sigma=sigma)
+
+    if sharpness:
+        # Implement the equivalent to transforms.RandomAdjustSharpness(0.5, 0.5)
+        sharpness_factor = random.uniform(0.5, 1.5)
+        sampled_images = TF.adjust_sharpness(sampled_images, sharpness_factor=sharpness_factor)
+        pred_image = TF.adjust_sharpness(pred_image, sharpness_factor=sharpness_factor)
+
     # Normalize sampled_images using mean and std
     sampled_images = (sampled_images - mean) / std
     
@@ -179,7 +195,7 @@ def get_imagenet_random_loader(
     random_classes=None,
     train=True,
     batch_size=32,
-    num_workers=4,
+    num_workers=16,
     exclude_images=None,
     include_images=None,
     mini=False

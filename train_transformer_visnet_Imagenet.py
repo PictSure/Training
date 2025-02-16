@@ -1,6 +1,6 @@
-from model.model_cifar import CustomResnetEmbedding, EmbeddingWrapper, CustomTransformerModel, ResNetWrapper
-# from model.model_PictSure_M import CustomTransformerModel, ResNetWrapper
+from model.model_icl_visnet import ProjectionWrapper, CustomTransformerModel
 from utils.data_loader_imagenet import get_imagenet_random_loader, normalize_samples
+from utils.data_loader_cifar10 import get_cifar10_random_loader
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -16,24 +16,19 @@ device = "cuda"
 num_classes = 5
 epsilon = 0.1
 
-# classifier = models.resnet18(pretrained=True)
-classifier = models.resnet18(pretrained=True)
-# classifier = models.resnet34(pretrained=True)
-# classifier = CustomResnetEmbedding()
-
-encoder = ResNetWrapper(classifier)
-# encoder = EmbeddingWrapper(classifier)
+# encoder = ResNetWrapper(classifier)
+encoder = ProjectionWrapper()
 
 criterion = nn.CrossEntropyLoss(label_smoothing=epsilon)
 
-batch_size = 16
+batch_size = 2
 
 print("Torch precision: ", torch.get_default_dtype())
 
 def train(lr=1e-3, num_epochs=40, num_images=10, batch_size=batch_size):
     initial_lr = 1e-6  # Start with a smaller learning rate
     target_lr = 1e-7
-    model = CustomTransformerModel(encoder, num_classes, device)
+    model = CustomTransformerModel(encoder, num_classes, device=device)
     model = model.to(device)
     optimizer = optim.AdamW(model.parameters(), lr=initial_lr, weight_decay=1e-5)
     
@@ -49,18 +44,18 @@ def train(lr=1e-3, num_epochs=40, num_images=10, batch_size=batch_size):
     test_classes = [87, 155, 178, 181, 199, 217, 284, 321, 452, 469, 483, 541, 574, 753, 777, 788, 826, 927, 946]
 
     print("Loading training data")
-    train_loader = get_imagenet_random_loader(batch_size=batch_size, num_classes=num_classes, num_samples=10000, num_images=num_images, train=True, exclude_images=test_classes, mini=False)
-    test_loader = get_imagenet_random_loader(batch_size=batch_size, num_classes=num_classes, num_samples=1000, num_images=num_images, train=False, include_images=test_classes, mini=True)
+    train_loader = get_cifar10_random_loader(batch_size=batch_size, num_classes=num_classes, num_samples=5000, num_images=num_images, train=True)
+    test_loader = get_cifar10_random_loader(batch_size=batch_size, num_classes=num_classes, num_samples=1000, num_images=num_images, train=False)
 
     print("Starting training")
     start_time = time.time()
 
     for epoch in range(num_epochs):
         # Linear ramp up of learning rate only over the first 10 epochs
-        if epoch < 60:
-            current_lr = initial_lr + (lr - initial_lr) * (epoch / 60)
-        elif epoch > 200:
-            current_lr = lr - (lr - target_lr) * ((epoch - 200) / 500)
+        if epoch < 30:
+            current_lr = initial_lr + (lr - initial_lr) * (epoch / 30)
+        elif epoch > 150:
+            current_lr = lr - (lr - target_lr) * ((epoch - 150) / 150)
         else:
             current_lr = lr
         for param_group in optimizer.param_groups:
@@ -74,7 +69,8 @@ def train(lr=1e-3, num_epochs=40, num_images=10, batch_size=batch_size):
 
         for batch_idx, (images, labels, pred_image, pred_label) in enumerate(tqdm(train_loader, desc=f"Epoch {epoch+1}/{num_epochs}")):
             images, labels, pred_image, pred_label = images.to(device, non_blocking=True), labels.to(device, non_blocking=True), pred_image.to(device, non_blocking=True), pred_label.to(device, non_blocking=True)
-            images, pred_image = normalize_samples(images, pred_image, sharpness=True, gaussian=True, resize=(224, 224))
+            images, pred_image = normalize_samples(images, pred_image, resize=(224, 224))
+
             outputs = model.forward(images, labels, pred_image)
             
             pred_label = pred_label.view(-1)
@@ -142,13 +138,12 @@ def train(lr=1e-3, num_epochs=40, num_images=10, batch_size=batch_size):
         print(f"Estimated time left: {remaining_time // 60:.0f} minutes {remaining_time % 60:.0f} seconds")
 
     # Save the model
-    model.eval()
-    torch.save(model.state_dict(), f"model/model_PictSure_S.pth")
+    torch.save(model.state_dict(), f"model/transformer_cifar_{num_images}_self_trained.pth")
     return avg_loss, accuracy, losses, accuracies, test_accuracies
 
 
 learning_rates = [1e-4]
-num_epochs = 700
+num_epochs = 300
 batches_per_epoch = 50000
 
 results = {}
@@ -171,8 +166,4 @@ plt.ylabel('Accuracy')
 plt.title('Accuracy vs. Epoch for different batch sizes')
 plt.legend()
 plt.grid(True)
-plt.savefig("5_shot_PictSure_S.pdf")
-
-# Save the losses and accuracies in a CSV file
-df = pd.DataFrame(results)
-df.to_csv("5_shot_PictSure_S.csv")
+plt.savefig("5_classes_comparison_self_trained.pdf")
