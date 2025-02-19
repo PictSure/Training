@@ -1,7 +1,7 @@
 import torch
 from utils.data_loader_imagenet import normalize_samples, get_cluster_random_loader
 from utils.util import count_parameters
-from model.model_cifar import CustomTransformerModel, EmbeddingWrapper, ResNetWrapper
+from model.model_PictSure import CustomTransformerModel, EmbeddingWrapper, ResNetWrapper
 from utils.summary_writer import SummaryWriter
 from torch.nn.utils import clip_grad_norm_
 import yaml
