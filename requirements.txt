@@ -1,0 +1,8 @@
+torch==2.6.0
+torchaudio==2.6.0
+torchvision==0.21.0
+pandas==2.2.3
+matplotlib==3.10.0
+tqdm==4.67.1
+PyYAML==6.0.2
+datadings==3.4.6

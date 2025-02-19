@@ -4,9 +4,11 @@ import random
 import numpy as np
 from torchvision import transforms, datasets
 import torch.nn.functional as F
-import torchvision.transforms.functional as TF
+from utils.cluster_dataloader import ImageNetDataDingsSet, ImageNetDataDingsSet2
+from tqdm import tqdm
 from collections import defaultdict
 from PIL import Image
+
 
 class ImageNetRandomDataset(Dataset):
     """
@@ -75,7 +77,7 @@ class ImageNetRandomDataset(Dataset):
         for img_path, label in self.dataset.samples:
             class_to_images[label].append(img_path)
         return class_to_images
-
+    
     def __len__(self):
         return self.num_samples
 
@@ -127,7 +129,7 @@ class ImageNetRandomDataset(Dataset):
         sampled_labels_torch = torch.tensor(sampled_labels, dtype=torch.long)  # Shape: (num_classes * num_images,)
 
         return sampled_images_torch, sampled_labels_torch, pred_image_torch, torch.tensor(pred_label, dtype=torch.long)
-    
+
 
 def normalize_samples(sampled_images, pred_image, gaussian=False, sharpness=False, resize=None):
     """
@@ -142,12 +144,14 @@ def normalize_samples(sampled_images, pred_image, gaussian=False, sharpness=Fals
         normalized_pred_image (torch.Tensor): Normalized prediction image.
     """
     # Define mean and std for normalization
-    mean = torch.tensor([0.4914, 0.4822, 0.4465], device=sampled_images.device).view(1, -1, 1, 1)
-    std = torch.tensor([0.2023, 0.1994, 0.2010], device=sampled_images.device).view(1, -1, 1, 1)
-    
+    mean = torch.tensor([0.4914, 0.4822, 0.4465],
+                        device=sampled_images.device).view(1, -1, 1, 1)
+    std = torch.tensor([0.2023, 0.1994, 0.2010],
+                       device=sampled_images.device).view(1, -1, 1, 1)
+
     # Get shapes
     N, B, C, H, W = sampled_images.size()  # sampled_images shape: (N, B, C, H, W)
-    
+
     # Reshape sampled_images to (N*B, C, H, W)
     sampled_images = sampled_images.view(N * B, C, H, W)
 
@@ -169,21 +173,24 @@ def normalize_samples(sampled_images, pred_image, gaussian=False, sharpness=Fals
 
     # Normalize sampled_images using mean and std
     sampled_images = (sampled_images - mean) / std
-    
+
     # Normalize pred_image, which has shape (N, C, H, W)
     pred_image = (pred_image - mean) / std
 
     # Resize if necessary
     if resize is not None:
         # Resize sampled_images (reshaped as (N*B, C, H, W))
-        sampled_images = F.interpolate(sampled_images, size=resize, mode="bilinear", align_corners=False)
-        
+        sampled_images = F.interpolate(
+            sampled_images, size=resize, mode="bilinear", align_corners=False)
+
         # Resize pred_image, handling (N, C, H, W)
-        pred_image = F.interpolate(pred_image, size=resize, mode="bilinear", align_corners=False)
-    
+        pred_image = F.interpolate(
+            pred_image, size=resize, mode="bilinear", align_corners=False)
+
     # Reshape sampled_images back to (N, B, C, H, W)
-    sampled_images = sampled_images.view(N, B, C, resize[0], resize[1]) if resize else sampled_images.view(N, B, C, H, W)
-    
+    sampled_images = sampled_images.view(
+        N, B, C, resize[0], resize[1]) if resize else sampled_images.view(N, B, C, H, W)
+
     return sampled_images, pred_image
 
 
@@ -229,6 +236,61 @@ def get_imagenet_random_loader(
         dataset,
         batch_size=batch_size,
         shuffle=True,
+        num_workers=num_workers,
+        pin_memory=True,
+    )
+
+    return loader
+
+
+def get_cluster_random_loader(
+    root="./data",
+    num_images=10,
+    num_samples=10000,
+    num_classes=2,
+    random_classes=None,
+    batch_size=32,
+    num_workers=4,
+    mini=False,
+    ratio=0.1
+):
+    """
+    Returns a DataLoader for the ImageNetRandomDataset.
+
+    Args:
+        root (str): Path to ImageNet dataset.
+        num_images (int): Number of images to sample per class.
+        num_samples (int): Total number of samples (length of the dataset).
+        num_classes (int): How many distinct classes to randomly choose for each sample.
+        random_classes (list or None): If provided, use these classes instead of sampling them randomly.
+        train (bool): Whether to load the train or val split.
+        batch_size (int): Batch size.
+        num_workers (int): Number of workers for the DataLoader.
+    """
+    if num_workers > 0:
+        dataset = ImageNetDataDingsSet2(
+            data_path=root,
+            num_images=num_images,
+            num_samples=num_samples,
+            num_classes=num_classes,
+            random_classes=random_classes,
+            mini=mini,
+            ratio=ratio
+        )
+    else:
+        dataset = ImageNetDataDingsSet(
+            data_path=root,
+            num_images=num_images,
+            num_samples=num_samples,
+            num_classes=num_classes,
+            random_classes=random_classes,
+            mini=mini,
+            ratio=ratio
+        )
+    loader = torch.utils.data.DataLoader(
+        dataset,
+        batch_size=batch_size,
+        shuffle=False,
         num_workers=num_workers,
         pin_memory=True,
     )

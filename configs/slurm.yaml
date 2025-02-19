@@ -1,0 +1,28 @@
+training_loc: "cluster"
+
+paths:
+  output: /netscratch/schiesser/embed_then_cat/runs/
+  dataset: /netscratch/schiesser/inet/
+
+resnet: 18
+
+model:
+  nheads: 4
+  nlayers: 8
+
+optimizer:
+  lr: 0.001
+  lr_initial: 0.000001
+  lr_target: 0.0000001
+  epochs: 30
+  weight_decay: 0.00001
+  log_step: 500
+  epsilon: 0.1
+  acc_steps: 1
+
+dataloader:
+  num_samples: 10000
+  batch_size: 16
+  num_classes: 10
+  num_images: 10
+  worker: 16
