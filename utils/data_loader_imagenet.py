@@ -4,7 +4,7 @@ import random
 import numpy as np
 from torchvision import transforms, datasets
 import torch.nn.functional as F
-# from utils.cluster_dataloader import ImageNetDataDingsSet, ImageNetDataDingsSet2
+from utils.cluster_dataloader import ImageNetDataDingsSet, ImageNetDataDingsSet2
 from tqdm import tqdm
 from collections import defaultdict
 from PIL import Image
@@ -157,7 +157,7 @@ def normalize_samples(sampled_images, pred_image, resize=None):
     sampled_images = sampled_images.view(N * B, C, H, W)
 
     # Normalize between [0, 1]
-    sampled_images = torch.clamp(sampled_images, 0, 255) / 255.0
+    # sampled_images = torch.clamp(sampled_images, 0, 255) / 255.0
 
     # Normalize sampled_images using mean and std
     sampled_images = (sampled_images - mean) / std
@@ -231,64 +231,56 @@ def get_imagenet_random_loader(
     return loader
 
 
-# def get_cluster_random_loader(
-#     root="./data",
-#     num_images=10,
-#     num_samples=10000,
-#     num_classes=2,
-#     random_classes=None,
-#     train=True,
-#     batch_size=32,
-#     num_workers=4,
-#     exclude_images=None,
-#     include_images=None,
-#     mini=False
-# ):
-#     """
-#     Returns a DataLoader for the ImageNetRandomDataset.
+def get_cluster_random_loader(
+    root="./data",
+    num_images=10,
+    num_samples=10000,
+    num_classes=2,
+    random_classes=None,
+    batch_size=32,
+    num_workers=4,
+    mini=False,
+    ratio=0.1
+):
+    """
+    Returns a DataLoader for the ImageNetRandomDataset.
 
-#     Args:
-#         root (str): Path to ImageNet dataset.
-#         num_images (int): Number of images to sample per class.
-#         num_samples (int): Total number of samples (length of the dataset).
-#         num_classes (int): How many distinct classes to randomly choose for each sample.
-#         random_classes (list or None): If provided, use these classes instead of sampling them randomly.
-#         train (bool): Whether to load the train or val split.
-#         batch_size (int): Batch size.
-#         num_workers (int): Number of workers for the DataLoader.
-#     """
-#     if num_workers > 0:
-#         dataset = ImageNetDataDingsSet2(
-#             data_path=root,
-#             num_images=num_images,
-#             num_samples=num_samples,
-#             num_classes=num_classes,
-#             random_classes=random_classes,
-#             train=train,
-#             excluded_classes=exclude_images,
-#             included_classes=include_images,
-#             mini=mini
-#         )
-#     else:
-#         print("HI")
-#         dataset = ImageNetDataDingsSet(
-#             data_path=root,
-#             num_images=num_images,
-#             num_samples=num_samples,
-#             num_classes=num_classes,
-#             random_classes=random_classes,
-#             train=train,
-#             excluded_classes=exclude_images,
-#             included_classes=include_images,
-#             mini=mini
-#         )
-#     print("zwei")
-#     loader = torch.utils.data.DataLoader(
-#         dataset,
-#         batch_size=batch_size,
-#         shuffle=False,
-#         num_workers=num_workers,
-#         pin_memory=True
-#     )
+    Args:
+        root (str): Path to ImageNet dataset.
+        num_images (int): Number of images to sample per class.
+        num_samples (int): Total number of samples (length of the dataset).
+        num_classes (int): How many distinct classes to randomly choose for each sample.
+        random_classes (list or None): If provided, use these classes instead of sampling them randomly.
+        train (bool): Whether to load the train or val split.
+        batch_size (int): Batch size.
+        num_workers (int): Number of workers for the DataLoader.
+    """
+    if num_workers > 0:
+        dataset = ImageNetDataDingsSet2(
+            data_path=root,
+            num_images=num_images,
+            num_samples=num_samples,
+            num_classes=num_classes,
+            random_classes=random_classes,
+            mini=mini,
+            ratio=ratio
+        )
+    else:
+        dataset = ImageNetDataDingsSet(
+            data_path=root,
+            num_images=num_images,
+            num_samples=num_samples,
+            num_classes=num_classes,
+            random_classes=random_classes,
+            mini=mini,
+            ratio=ratio
+        )
+    loader = torch.utils.data.DataLoader(
+        dataset,
+        batch_size=batch_size,
+        shuffle=False,
+        num_workers=num_workers,
+        pin_memory=True,
+    )
 
-#     return loader
+    return loader
