@@ -4,7 +4,7 @@ resnet: 18
 
 paths:
   output: output/
-  dataset: data/img-dds-val/val.msgpack
+  dataset: /Volumes/DFKI117/
 
 model:
   nheads: 4
