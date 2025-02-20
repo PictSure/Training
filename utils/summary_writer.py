@@ -8,15 +8,17 @@ import torch
 from pprint import pprint
 
 class SummaryWriter:
-    def __init__(self, directory="./runs/"):
+    def __init__(self, directory="./runs/", runname=None):
         """
         Initialize the SummaryWriter with metrics to track.
         
         :param metrics: Names of metrics to track as strings.
         """
         self.pardir = directory
+        self.runname = runname + datetime.now().strftime(
+            '%Y%m%d_%H%M%S') if runname else datetime.now().strftime('%Y%m%d_%H%M%S')
         self.rundir = os.path.join(
-            directory, datetime.now().strftime('%Y%m%d_%H%M%S'))
+            directory, self.runname)
         self.params = dict()
         self.batch_csv_path = os.path.join(
             self.rundir, "batch_metrics.csv"
