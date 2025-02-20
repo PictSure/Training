@@ -1,4 +1,5 @@
 from model.model_cifar import CustomResnetEmbedding, EmbeddingWrapper, CustomTransformerModel, ResNetWrapper
+# from model.model_PictSure_M import CustomTransformerModel, ResNetWrapper
 from utils.data_loader_imagenet import get_imagenet_random_loader, normalize_samples
 import torch
 import torch.nn as nn
@@ -16,15 +17,16 @@ num_classes = 5
 epsilon = 0.1
 
 # classifier = models.resnet18(pretrained=True)
-# classifier = models.resnet18(pretrained=True)
-classifier = CustomResnetEmbedding()
+classifier = models.resnet18(pretrained=True)
+# classifier = models.resnet34(pretrained=True)
+# classifier = CustomResnetEmbedding()
 
-# encoder = ResNetWrapper(classifier)
-encoder = EmbeddingWrapper(classifier)
+encoder = ResNetWrapper(classifier)
+# encoder = EmbeddingWrapper(classifier)
 
 criterion = nn.CrossEntropyLoss(label_smoothing=epsilon)
 
-batch_size = 2
+batch_size = 16
 
 print("Torch precision: ", torch.get_default_dtype())
 
@@ -48,17 +50,17 @@ def train(lr=1e-3, num_epochs=40, num_images=10, batch_size=batch_size):
 
     print("Loading training data")
     train_loader = get_imagenet_random_loader(batch_size=batch_size, num_classes=num_classes, num_samples=10000, num_images=num_images, train=True, exclude_images=test_classes, mini=False)
-    test_loader = get_imagenet_random_loader(batch_size=batch_size, num_classes=num_classes, num_samples=200, num_images=num_images, train=True, include_images=test_classes, mini=True)
+    test_loader = get_imagenet_random_loader(batch_size=batch_size, num_classes=num_classes, num_samples=1000, num_images=num_images, train=False, include_images=test_classes, mini=True)
 
     print("Starting training")
     start_time = time.time()
 
     for epoch in range(num_epochs):
         # Linear ramp up of learning rate only over the first 10 epochs
-        if epoch < 30:
-            current_lr = initial_lr + (lr - initial_lr) * (epoch / 30)
-        elif epoch > 150:
-            current_lr = lr - (lr - target_lr) * ((epoch - 150) / 150)
+        if epoch < 60:
+            current_lr = initial_lr + (lr - initial_lr) * (epoch / 60)
+        elif epoch > 200:
+            current_lr = lr - (lr - target_lr) * ((epoch - 200) / 500)
         else:
             current_lr = lr
         for param_group in optimizer.param_groups:
@@ -68,12 +70,11 @@ def train(lr=1e-3, num_epochs=40, num_images=10, batch_size=batch_size):
         total_samples = 0
         total_loss = 0
 
-        accumulation_steps = 8  # Number of steps to accumulate gradients
+        accumulation_steps = 1  # Number of steps to accumulate gradients
 
         for batch_idx, (images, labels, pred_image, pred_label) in enumerate(tqdm(train_loader, desc=f"Epoch {epoch+1}/{num_epochs}")):
             images, labels, pred_image, pred_label = images.to(device, non_blocking=True), labels.to(device, non_blocking=True), pred_image.to(device, non_blocking=True), pred_label.to(device, non_blocking=True)
-            images, pred_image = normalize_samples(images, pred_image, resize=(224, 224))
-
+            images, pred_image = normalize_samples(images, pred_image, sharpness=True, gaussian=True, resize=(224, 224))
             outputs = model.forward(images, labels, pred_image)
             
             pred_label = pred_label.view(-1)
@@ -141,12 +142,13 @@ def train(lr=1e-3, num_epochs=40, num_images=10, batch_size=batch_size):
         print(f"Estimated time left: {remaining_time // 60:.0f} minutes {remaining_time % 60:.0f} seconds")
 
     # Save the model
-    torch.save(model.state_dict(), f"model/transformer_cifar_{num_images}_self_trained.pth")
+    model.eval()
+    torch.save(model.state_dict(), f"model/model_PictSure_S.pth")
     return avg_loss, accuracy, losses, accuracies, test_accuracies
 
 
 learning_rates = [1e-4]
-num_epochs = 300
+num_epochs = 700
 batches_per_epoch = 50000
 
 results = {}
@@ -169,4 +171,8 @@ plt.ylabel('Accuracy')
 plt.title('Accuracy vs. Epoch for different batch sizes')
 plt.legend()
 plt.grid(True)
-plt.savefig("5_classes_comparison_self_trained.pdf")
+plt.savefig("5_shot_PictSure_S.pdf")
+
+# Save the losses and accuracies in a CSV file
+df = pd.DataFrame(results)
+df.to_csv("5_shot_PictSure_S.csv")

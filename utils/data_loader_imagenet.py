@@ -70,8 +70,6 @@ class ImageNetRandomDataset(Dataset):
             self.transform = transforms.Compose([
                 transforms.Resize((224, 224)),
                 transforms.ToTensor(),
-                transforms.GaussianBlur(5, sigma=(0.1, 2.0)),
-                transforms.RandomAdjustSharpness(0.2, 0.2)
             ])
 
     def _build_class_index(self):
@@ -115,6 +113,7 @@ class ImageNetRandomDataset(Dataset):
                 sampled_images.append(self.transform(image))
                 sampled_labels.append(label_idx)
 
+
             class_to_label[cls] = label_idx
 
         # Randomly pick a prediction image from one of the chosen classes
@@ -132,7 +131,7 @@ class ImageNetRandomDataset(Dataset):
         return sampled_images_torch, sampled_labels_torch, pred_image_torch, torch.tensor(pred_label, dtype=torch.long)
 
 
-def normalize_samples(sampled_images, pred_image, resize=None):
+def normalize_samples(sampled_images, pred_image, gaussian=False, sharpness=False, resize=None):
     """
     Normalize the input and prediction images to the range [0, 1].
     
@@ -158,6 +157,19 @@ def normalize_samples(sampled_images, pred_image, resize=None):
 
     # Normalize between [0, 1]
     # sampled_images = torch.clamp(sampled_images, 0, 255) / 255.0
+
+    if gaussian:
+        # Implement the equivalent to transforms.GaussianBlur(5, sigma=(0.1, 2.0)),
+        kernel_size = 5
+        sigma = random.uniform(0.1, 2.0)
+        sampled_images = TF.gaussian_blur(sampled_images, kernel_size=kernel_size, sigma=sigma)
+        pred_image = TF.gaussian_blur(pred_image, kernel_size=kernel_size, sigma=sigma)
+
+    if sharpness:
+        # Implement the equivalent to transforms.RandomAdjustSharpness(0.5, 0.5)
+        sharpness_factor = random.uniform(0.5, 1.5)
+        sampled_images = TF.adjust_sharpness(sampled_images, sharpness_factor=sharpness_factor)
+        pred_image = TF.adjust_sharpness(pred_image, sharpness_factor=sharpness_factor)
 
     # Normalize sampled_images using mean and std
     sampled_images = (sampled_images - mean) / std
@@ -190,7 +202,7 @@ def get_imagenet_random_loader(
     random_classes=None,
     train=True,
     batch_size=32,
-    num_workers=4,
+    num_workers=16,
     exclude_images=None,
     include_images=None,
     mini=False

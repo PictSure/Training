@@ -1,0 +1,27 @@
+training_loc:
+
+resnet: 18
+
+paths:
+  output:
+  dataset:
+
+model:
+  nheads: 8
+  nlayers: 4
+
+optimizer:
+  lr_initial: 1e-6
+  lr_target: 1e-7
+  lr: 1e-4
+  epochs: 1200
+  weight_decay: 1e-5
+  log_step: 10
+  epsilon: 0.1
+  acc_steps: 1
+
+dataloader:
+  num_samples: 10000
+  batch_size: 16
+  num_classes: 10
+  num_images: 5
