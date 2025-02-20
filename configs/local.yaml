@@ -2,6 +2,8 @@ training_loc: "local"
 
 resnet: 18
 
+name: test
+
 paths:
   output: output/
   dataset: /Volumes/DFKI117/
@@ -14,7 +16,7 @@ optimizer:
   lr_initial: 0.000001
   lr_target: 0.0000001
   lr: 0.001
-  epochs: 40
+  epochs: 1
   weight_decay: 0.00001
   log_step: 500
   epsilon: 0.1

@@ -14,7 +14,7 @@ optimizer:
   lr: 0.001
   lr_initial: 0.000001
   lr_target: 0.0000001
-  epochs: 30
+  epochs: 10
   weight_decay: 0.00001
   log_step: 500
   epsilon: 0.1

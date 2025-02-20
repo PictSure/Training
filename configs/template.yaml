@@ -2,6 +2,8 @@ training_loc:
 
 resnet: 
 
+name: 
+
 paths:
   output:
   dataset:
