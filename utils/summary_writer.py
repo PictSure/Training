@@ -15,7 +15,7 @@ class SummaryWriter:
         :param metrics: Names of metrics to track as strings.
         """
         self.pardir = directory
-        self.runname = runname + datetime.now().strftime(
+        self.runname = runname + "_" + datetime.now().strftime(
             '%Y%m%d_%H%M%S') if runname else datetime.now().strftime('%Y%m%d_%H%M%S')
         self.rundir = os.path.join(
             directory, self.runname)

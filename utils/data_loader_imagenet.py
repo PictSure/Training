@@ -162,14 +162,14 @@ def normalize_samples(sampled_images, pred_image, gaussian=False, sharpness=Fals
         # Implement the equivalent to transforms.GaussianBlur(5, sigma=(0.1, 2.0)),
         kernel_size = 5
         sigma = random.uniform(0.1, 2.0)
-        sampled_images = TF.gaussian_blur(sampled_images, kernel_size=kernel_size, sigma=sigma)
-        pred_image = TF.gaussian_blur(pred_image, kernel_size=kernel_size, sigma=sigma)
+        sampled_images = F.gaussian_blur(sampled_images, kernel_size=kernel_size, sigma=sigma)
+        pred_image = F.gaussian_blur(pred_image, kernel_size=kernel_size, sigma=sigma)
 
     if sharpness:
         # Implement the equivalent to transforms.RandomAdjustSharpness(0.5, 0.5)
         sharpness_factor = random.uniform(0.5, 1.5)
-        sampled_images = TF.adjust_sharpness(sampled_images, sharpness_factor=sharpness_factor)
-        pred_image = TF.adjust_sharpness(pred_image, sharpness_factor=sharpness_factor)
+        sampled_images = F.adjust_sharpness(sampled_images, sharpness_factor=sharpness_factor)
+        pred_image = F.adjust_sharpness(pred_image, sharpness_factor=sharpness_factor)
 
     # Normalize sampled_images using mean and std
     sampled_images = (sampled_images - mean) / std
