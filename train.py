@@ -23,7 +23,7 @@ if __name__=="__main__":
         config = yaml.load(f, Loader=yaml.FullLoader)
 
 
-    writer = SummaryWriter(directory=config["paths"]["output"])
+    writer = SummaryWriter(directory=config["paths"]["output"], runname=config["name"])
 
     test_classes = [87, 155, 178, 181, 199, 217, 284, 321,
                     452, 469, 483, 541, 574, 753, 777, 788, 826, 927, 946]
@@ -191,8 +191,7 @@ if __name__=="__main__":
         })
         writer.flush()
     epoch_progress.close()
-    writer.save_to_file()
-    writer.save_model(model)
+    writer.save_model(model=model, epoch_idx=epoch)
 
     smoothed_losses = pd.Series(losses).rolling(window=4).mean()
     smoothed_accuracies = pd.Series(accuracies).rolling(window=4).mean()
@@ -200,7 +199,7 @@ if __name__=="__main__":
 
     fig, ax1 = plt.subplots(figsize=(10, 5))
 
-    ax1.set_xlabel('Batch')
+    ax1.set_xlabel('Epoch')
     ax1.set_ylabel('Loss', color='tab:blue')
     ax1.plot(smoothed_accuracies, label='Loss', color='tab:blue')
     ax1.tick_params(axis='y', labelcolor='tab:blue')
@@ -215,4 +214,5 @@ if __name__=="__main__":
     ax1.grid(True)
 
     writer.save_figure(fig, "train_loss_acc.jpg")
+    writer.close()
 
