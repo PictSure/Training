@@ -1,6 +1,6 @@
 from datadings.writer import FileWriter
 from torch.utils.data import Subset
-from torchvision.datasets import ImageNet
+from torchvision.datasets import ImageNet, ImageFolder
 import numpy as np
 from simplejpeg import encode_jpeg
 from tqdm import trange
@@ -42,17 +42,29 @@ if __name__ == "__main__":
     parser.add_argument('--input', '-i', default="./data")
     parser.add_argument('--test', "-t", action="store_true")
     parser.add_argument('--output', '-o')
+    parser.add_argument('--dataset', '-d', default="inet")
     args = parser.parse_args()
 
-    dataset = ImageNet(root=args.input, split="train")
-    if args.test:
-        include_classes = [87, 155, 178, 181, 199, 217, 284, 321,
-                        452, 469, 483, 541, 574, 753, 777, 788, 826, 927, 946]
-        exclude_classes = None
-    else:
-        exclude_classes = [87, 155, 178, 181, 199, 217, 284, 321,
-                           452, 469, 483, 541, 574, 753, 777, 788, 826, 927, 946]
-        include_classes = None
+    if args.dataset == "inet":
+        dataset = ImageNet(root=args.input, split="train")
+        if args.test:
+            include_classes = [87, 155, 178, 181, 199, 217, 284, 321,
+                            452, 469, 483, 541, 574, 753, 777, 788, 826, 927, 946]
+            exclude_classes = None
+        else:
+            exclude_classes = [87, 155, 178, 181, 199, 217, 284, 321,
+                            452, 469, 483, 541, 574, 753, 777, 788, 826, 927, 946]
+            include_classes = None
+    elif args.dataset == "inet21k":
+        print("Creating Dataset")
+        dataset = ImageFolder(root=args.input)
+        print("Dataset created")
+        if args.test:
+            include_classes = [895, 1387, 1415, 1420, 1445, 1472, 1572, 1776, 2872, 3071, 3193, 3809, 4259, 5598, 5855, 5987, 6299, 7282, 7523]
+            exclude_classes = None
+        else:
+            exclude_classes = [895, 1387, 1415, 1420, 1445, 1472, 1572, 1776, 2872, 3071, 3193, 3809, 4259, 5598, 5855, 5987, 6299, 7282, 7523]
+            include_classes = None
 
     indices = []
     for idx, (_, target) in enumerate(dataset.samples):
@@ -68,7 +80,10 @@ if __name__ == "__main__":
     with FileWriter(args.output) as writer:
         progressbar = trange(len(ds))
         for i, (img, label) in enumerate(ds):
-            nimg = encode_img(img)
+            if args.dataset == "inet21k":
+                nimg = encode_img(img, short_side=224, long_side=224)
+            else:
+                nimg = encode_img(img)
             sample = {'key': str(i), 'image': nimg, 'label': label}
             writer.write(sample)
             progressbar.update()
