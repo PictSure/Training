@@ -7,6 +7,8 @@ name: test
 paths:
   output: output/
   dataset: /Volumes/DFKI117/
+  train: imagenet21k-train.msgpack
+  test: imagenet21k-test.msgpack
 
 model:
   nheads: 4
@@ -27,3 +29,5 @@ dataloader:
   batch_size: 16
   num_classes: 5
   num_images: 10
+  train_ratio: 0.01
+  test_ratio: 1

@@ -29,9 +29,9 @@ if __name__=="__main__":
                     452, 469, 483, 541, 574, 753, 777, 788, 826, 927, 946]
     print("Creating dataloader")
     training_loader = get_cluster_random_loader(
-        root=os.path.join(config["paths"]["dataset"], "imagenet-train2.msgpack"), batch_size=config["dataloader"]["batch_size"], num_classes=config["dataloader"]["num_classes"], num_samples=10000, num_images=config["dataloader"]["num_images"], mini=False, num_workers=0, ratio=0.05)
+        root=os.path.join(config["paths"]["dataset"], config["paths"]["test"]), batch_size=config["dataloader"]["batch_size"], num_classes=config["dataloader"]["num_classes"], num_samples=10000, num_images=config["dataloader"]["num_images"], mini=False, num_workers=0, ratio=config["dataloader"]["train_ration"])
     test_loader = get_cluster_random_loader(
-        root=os.path.join(config["paths"]["dataset"], "imagenet-test2.msgpack"), batch_size=config["dataloader"]["batch_size"], num_classes=config["dataloader"]["num_classes"], num_samples=500, num_images=config["dataloader"]["num_images"], mini=True, num_workers=0, ratio=1)
+        root=os.path.join(config["paths"]["dataset"], config["paths"]["test"]), batch_size=config["dataloader"]["batch_size"], num_classes=config["dataloader"]["num_classes"], num_samples=500, num_images=config["dataloader"]["num_images"], mini=True, num_workers=0, ratio=config["dataloader"]["test_ratio"])
     test_loader.dataset.build_image_index()
     print("DataLoader created")
     # training_loader = get_imagenet_random_loader(root=config["paths"]["dataset"], batch_size=config["dataloader"]["batch_size"], num_classes=config["dataloader"]["num_classes"], num_samples=10000,

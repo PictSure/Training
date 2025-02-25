@@ -1,10 +1,14 @@
-training_loc:
+training_loc: "cluster"
+
+name: l
 
 resnet: 50
 
 paths:
-  output:
-  dataset:
+  output: /netscratch/schiesser/embed_then_cat/runs/
+  dataset: /netscratch/schiesser/inet/
+  train: imagenet21k-train.msgpack
+  test: imagenet21k-test.msgpack
 
 model:
   nheads: 17
@@ -25,3 +29,5 @@ dataloader:
   batch_size: 16
   num_classes: 50
   num_images: 5
+  train_ratio: 0.02
+  test_ratio: 1
