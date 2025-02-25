@@ -80,6 +80,7 @@ if __name__=="__main__":
     writer.log_hyperparameters(config)
     print("Starting training")
     epoch_progress = trange(EPOCHS)
+    best_loss = float("inf")
 
     for epoch in range(EPOCHS):
         if epoch < 30:
@@ -190,6 +191,9 @@ if __name__=="__main__":
             "loss": avg_loss, "acc": accuracy, "test_acc": test_acc, "avg_grad_norm": avg_grad_norm
         })
         writer.flush()
+        if avg_loss < best_loss:
+            best_loss = avg_loss
+            writer.save_model(model=model, epoch_idx=epoch)
     epoch_progress.close()
     writer.save_model(model=model, epoch_idx=epoch)
 
