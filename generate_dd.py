@@ -6,6 +6,8 @@ from simplejpeg import encode_jpeg
 from tqdm import trange
 import argparse
 from PIL import Image
+import multiprocessing
+from tqdm import tqdm
 
 
 def encode_img(img, quality=85, short_side=375, long_side=500, colorsubsampling='422'):
@@ -36,6 +38,22 @@ def encode_img(img, quality=85, short_side=375, long_side=500, colorsubsampling=
             im = np.array(pil.resize((w, h), resample=Image.LANCZOS))
         return encode_jpeg(im, quality=quality, colorsubsampling=colorsubsampling)
 
+def process_sample(args):
+    """ Helper function to process and encode an image """
+    idx, img, label, dataset_name = args
+    if dataset_name == "inet21k":
+        nimg = encode_img(img, short_side=224, long_side=224)
+    else:
+        nimg = encode_img(img)
+    return {'key': str(idx), 'image': nimg, 'label': label}
+
+def safe_unpack(i, data, dataset_name):
+    try:
+        img, label = data  # Attempt to unpack
+        return (i, img, label, dataset_name)
+    except Exception as e:
+        print(f"Skipping index {i} due to error: {e}")
+        return None  # Return None or any fallback
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -44,6 +62,8 @@ if __name__ == "__main__":
     parser.add_argument('--output', '-o')
     parser.add_argument('--dataset', '-d', default="inet")
     args = parser.parse_args()
+
+    print(f"Creating {'test' if args.test else 'train'} set.")
 
     if args.dataset == "inet":
         dataset = ImageNet(root=args.input, split="train")
@@ -65,9 +85,9 @@ if __name__ == "__main__":
         else:
             exclude_classes = [895, 1387, 1415, 1420, 1445, 1472, 1572, 1776, 2872, 3071, 3193, 3809, 4259, 5598, 5855, 5987, 6299, 7282, 7523]
             include_classes = None
-
+    print("Creating subset")
     indices = []
-    for idx, (_, target) in enumerate(dataset.samples):
+    for idx, (_, target) in tqdm(enumerate(dataset.samples), total=len(dataset.samples)):
         if include_classes is not None and target not in include_classes:
             continue
         if exclude_classes is not None and target in exclude_classes:
@@ -75,8 +95,7 @@ if __name__ == "__main__":
         indices.append(idx)
 
     ds = Subset(dataset, indices)
-
-
+    
     with FileWriter(args.output) as writer:
         progressbar = trange(len(ds))
         for i, (img, label) in enumerate(ds):
