@@ -78,22 +78,26 @@ class ImageNetDataDingsSet(Dataset):
         return data_dict
     
     def build_image_index(self):
-        self.clear_cache()
-        chosen_classes = random.sample(list(self.class_index.keys()), k=int(self.ratio*self.num_total_classes))
-        data_dict = defaultdict(list)
-        progessbar = trange(len(chosen_classes), leave=False)
-        for i in chosen_classes:
-            samples = self.class_index[i]
-            for sample_idx in samples:
-                sample = self.dataset[sample_idx]
-                img = self.transform(sample["image"])
-                data_dict[i].append(img)
-            progessbar.update()
-        progessbar.close()
-        self.classes = chosen_classes
-        self.data = data_dict
+        while True:
+            self.clear_cache()
+            chosen_classes = random.sample(list(self.class_index.keys()), k=int(self.ratio*self.num_total_classes))
+            data_dict = defaultdict(list)
+            progessbar = trange(len(chosen_classes), leave=False)
+            for i in chosen_classes:
+                samples = self.class_index[i]
+                for sample_idx in samples:
+                    sample = self.dataset[sample_idx]
+                    img = self.transform(sample["image"])
+                    data_dict[i].append(img)
+                progessbar.update()
+            progessbar.close()
+            self.classes = chosen_classes
+            self.data = data_dict
+            if not self._check_bad_image_index():
+                break
         
-            
+    def _check_bad_image_index(self):
+        return any(len(v) < self.num_classes * self.num_images for v in self.data.values()) if self.data else True
 
     def __len__(self):
         return self.num_samples
