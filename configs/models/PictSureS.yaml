@@ -15,11 +15,11 @@ model:
   nlayers: 4
 
 optimizer:
-  lr_initial: 1e-6
-  lr_target: 1e-7
-  lr: 1e-4
+  lr_initial: 0.000001
+  lr_target: 0.0000001
+  lr: 0.0001
   epochs: 1200
-  weight_decay: 1e-5
+  weight_decay: 0.00001
   log_step: 10
   epsilon: 0.1
   acc_steps: 1
@@ -31,3 +31,4 @@ dataloader:
   num_images: 5
   train_ratio: 0.01
   test_ratio: 1
+  num_workers: 16
