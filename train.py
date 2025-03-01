@@ -29,9 +29,9 @@ if __name__=="__main__":
                     452, 469, 483, 541, 574, 753, 777, 788, 826, 927, 946]
     print("Creating dataloader")
     training_loader = get_cluster_random_loader(
-        root=os.path.join(config["paths"]["dataset"], config["paths"]["train"]), batch_size=config["dataloader"]["batch_size"], num_classes=config["dataloader"]["num_classes"], num_samples=10000, num_images=config["dataloader"]["num_images"], mini=False, num_workers=0, ratio=config["dataloader"]["train_ratio"])
+        root=os.path.join(config["paths"]["dataset"], config["paths"]["train"]), batch_size=config["dataloader"]["batch_size"], num_classes=config["dataloader"]["num_classes"], num_samples=config["dataloader"]["num_samples"], num_images=config["dataloader"]["num_images"], mini=False, num_workers=config["dataloader"]["num_workers"], ratio=config["dataloader"]["train_ratio"])
     test_loader = get_cluster_random_loader(
-        root=os.path.join(config["paths"]["dataset"], config["paths"]["test"]), batch_size=config["dataloader"]["batch_size"], num_classes=config["dataloader"]["num_classes"], num_samples=500, num_images=config["dataloader"]["num_images"], mini=True, num_workers=0, ratio=config["dataloader"]["test_ratio"])
+        root=os.path.join(config["paths"]["dataset"], config["paths"]["test"]), batch_size=config["dataloader"]["batch_size"], num_classes=config["dataloader"]["num_classes"], num_samples=500, num_images=config["dataloader"]["num_images"], mini=True, num_workers=config["dataloader"]["num_workers"], ratio=config["dataloader"]["test_ratio"])
     test_loader.dataset.build_image_index()
     print("DataLoader created")
     # training_loader = get_imagenet_random_loader(root=config["paths"]["dataset"], batch_size=config["dataloader"]["batch_size"], num_classes=config["dataloader"]["num_classes"], num_samples=10000,
@@ -83,10 +83,10 @@ if __name__=="__main__":
     best_loss = float("inf")
 
     for epoch in range(EPOCHS):
-        if epoch < 30:
-            current_lr = initial_lr + (lr - initial_lr) * (epoch / 30)
-        elif epoch > 150:
-            current_lr = lr - (lr - target_lr) * ((epoch - 150) / 150)
+        if epoch < 60:
+            current_lr = initial_lr + (lr - initial_lr) * (epoch / 60)
+        elif epoch > 200:
+            current_lr = lr - (lr - target_lr) * ((epoch - 200) / 500)
         else:
             current_lr = lr
         for param_group in optimizer.param_groups:
@@ -95,14 +95,13 @@ if __name__=="__main__":
         total_correct = 0
         total_samples = 0
         total_loss = 0
-        if epoch % 5 == 0:
+        if epoch % 30 == 0:
             training_loader.dataset.build_image_index()
 
         model.train(True)
-        size = len(training_loader.dataset)
+        size = len(training_loader)
         progressbar = trange(len(training_loader), leave=False)
         for batch_idx, (images, labels, pred_image, pred_label) in enumerate(training_loader):
-            start = time.time()
             images, labels, pred_image, pred_label = images.to(device, non_blocking=True), labels.to(
                 device, non_blocking=True), pred_image.to(device, non_blocking=True), pred_label.to(device, non_blocking=True)
             images, pred_image = normalize_samples(
@@ -131,15 +130,10 @@ if __name__=="__main__":
                 total_correct += correct
                 total_samples += total
                 acc = correct / total
-            writer.log_batch_metrics("train", batch_idx, {
-                "loss": loss.item(), "acc": acc
-            })
-            end = time.time()
-            progressbar.set_description(
-                '[Train] Loss: {:.4f}, Acc: {:.2f} [Batch: {:>5d}, Total Time: {:.4f}s]'.format(
-                    loss, acc, (batch_idx + 1), (end - start)
-                )
-            )
+            if batch_idx % 10 == 0:
+                writer.log_batch_metrics("train", batch_idx, {
+                    "loss": loss.item(), "acc": acc
+                })
             progressbar.update()
         progressbar.close()
 
@@ -167,7 +161,7 @@ if __name__=="__main__":
             progressbar.close()
 
         test_acc = test_correct / test_samples
-        avg_loss = total_loss / total_samples
+        avg_loss = total_loss / size
         accuracy = total_correct / total_samples
         
         test_accuracies.append(test_acc)
@@ -193,9 +187,9 @@ if __name__=="__main__":
         writer.flush()
         if avg_loss < best_loss:
             best_loss = avg_loss
-            writer.save_model(model=model, epoch_idx=epoch)
+            writer.save_model(model=model, filename="best_model.pt")
     epoch_progress.close()
-    writer.save_model(model=model, epoch_idx=epoch)
+    writer.save_model(model=model, filename="final_model.pt")
 
     smoothed_losses = pd.Series(losses).rolling(window=4).mean()
     smoothed_accuracies = pd.Series(accuracies).rolling(window=4).mean()

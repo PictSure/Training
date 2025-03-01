@@ -73,7 +73,7 @@ class SummaryWriter:
     def save_figure(self, figure, filename):
         figure.savefig(os.path.join(self.rundir, filename))
     
-    def save_model(self, model: torch.nn.Module, epoch_idx: int, filename: str = None):
+    def save_model(self, model: torch.nn.Module, epoch_idx: int = None, filename: str = None):
         """
         Save a PyTorch model checkpoint to disk.
         Args:
