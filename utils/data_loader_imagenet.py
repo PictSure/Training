@@ -268,26 +268,15 @@ def get_cluster_random_loader(
         batch_size (int): Batch size.
         num_workers (int): Number of workers for the DataLoader.
     """
-    if num_workers > 0:
-        dataset = ImageNetDataDingsSet2(
-            data_path=root,
-            num_images=num_images,
-            num_samples=num_samples,
-            num_classes=num_classes,
-            random_classes=random_classes,
-            mini=mini,
-            ratio=ratio
-        )
-    else:
-        dataset = ImageNetDataDingsSet(
-            data_path=root,
-            num_images=num_images,
-            num_samples=num_samples,
-            num_classes=num_classes,
-            random_classes=random_classes,
-            mini=mini,
-            ratio=ratio
-        )
+    dataset = ImageNetDataDingsSet(
+        data_path=root,
+        num_images=num_images,
+        num_samples=num_samples,
+        num_classes=num_classes,
+        random_classes=random_classes,
+        mini=mini,
+        ratio=ratio
+    )
     loader = torch.utils.data.DataLoader(
         dataset,
         batch_size=batch_size,
