@@ -2,7 +2,7 @@ import torch
 from utils.data_loader_imagenet import normalize_samples, get_cluster_random_loader
 from utils.util import count_parameters
 from model.model_PictSure import CustomTransformerModel, EmbeddingWrapper, ResNetWrapper
-from utils.summary_writer import SummaryWriter
+from utils.summary_writer import SummaryWriter, find_latest_run_directory
 from torch.nn.utils import clip_grad_norm_
 import yaml
 from tqdm import trange
@@ -16,14 +16,67 @@ import time
 if __name__=="__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('--config', '-c', help='Path to config file', default='./configs/slurm.yaml')
+    parser.add_argument('--new', '-n', help="Start training from scratch", action="store_true")
     args = parser.parse_args()
 
 
     with open(args.config, "r") as f:
         config = yaml.load(f, Loader=yaml.FullLoader)
+    
+    device = (
+        "cuda"
+        if torch.cuda.is_available()
+        else "mps"
+        if torch.backends.mps.is_available()
+        else "cpu"
+    )
+    print(f"Using {device} device")
+    classifier = (
+        models.resnet18(pretrained=True)
+        if config["resnet"] == 18
+        else models.resnet34(pretrained=True)
+        if config["resnet"] == 34
+        else models.resnet50(pretrained=True)
+    )
+    encoder = ResNetWrapper(classifier)
+
+    model = CustomTransformerModel(encoder, config["dataloader"]
+                                   ["num_classes"], nheads=config["model"]["nheads"], nlayer=config["model"]["nlayers"], device=device)
+    print("Model created")
+    model.to(device)
+    total_params, trainable_params = count_parameters(model)
+    # Print the number of parameters, but with . notation for better readability
+    print(
+        f"Total parameters: {total_params:,}, Trainable parameters: {trainable_params:,}, Share of trainable: {trainable_params / total_params:.2%}")
+    loss_fn = torch.nn.CrossEntropyLoss(
+        label_smoothing=config["optimizer"]["epsilon"])
+    lr = config["optimizer"]["lr"]
+    target_lr = config["optimizer"]["lr_target"]
+    initial_lr = config["optimizer"]["lr_initial"]
+    optimizer = torch.optim.AdamW(model.parameters(
+    ), lr=initial_lr, weight_decay=config["optimizer"]["weight_decay"])
+    start_epoch = 0
+    if args.new:
+        writer = SummaryWriter(
+            directory=config["paths"]["output"], runname=config["name"])
+    else:
+        run_dir = find_latest_run_directory(
+            config["paths"]["output"], config["name"])
+        if run_dir:
+            print(f"Resuming from: {run_dir}")
+            # Resume logging in the same directory
+            writer = SummaryWriter(directory=config["paths"]["output"], runfolder=run_dir)
+            checkpoint_path = os.path.join(config["paths"]["output"], run_dir, "checkpoint.pt")
+            checkpoint = torch.load(checkpoint_path, map_location=device)
+            model.load_state_dict(checkpoint["model_state"])
+            optimizer.load_state_dict(checkpoint["optimizer_state"])
+            start_epoch = checkpoint["epoch"]
+        else:
+            print("No checkpoint found. Starting a new run...")
+            writer = SummaryWriter(
+                directory=config["paths"]["output"], runname=config["name"])
 
 
-    writer = SummaryWriter(directory=config["paths"]["output"], runname=config["name"])
 
     test_classes = [87, 155, 178, 181, 199, 217, 284, 321,
                     452, 469, 483, 541, 574, 753, 777, 788, 826, 927, 946]
@@ -38,51 +91,19 @@ if __name__=="__main__":
     #                                              num_images=config["dataloader"]["num_images"], train=True, exclude_images=test_classes, mini=False, num_workers=config["dataloader"]["worker"])
     # test_loader = get_imagenet_random_loader(root=config["paths"]["dataset"], batch_size=config["dataloader"]["batch_size"], num_classes=config["dataloader"]["num_classes"],
     #                                          num_samples=10000, num_images=config["dataloader"]["num_images"], train=True, include_images=test_classes, mini=True, num_workers=config["dataloader"]["worker"])
-    
-    device = (
-        "cuda"
-        if torch.cuda.is_available()
-        else "mps"
-        if torch.backends.mps.is_available()
-        else "cpu"
-    )
-
-    print(f"Using {device} device")
 
 
     EPOCHS = config["optimizer"]["epochs"]
-
-    classifier = (
-        models.resnet18(pretrained=True)
-        if config["resnet"] == 18
-        else models.resnet34(pretrained=True)
-        if config["resnet"] == 34
-        else models.resnet50(pretrained=True)
-    )
-    encoder = ResNetWrapper(classifier)
-
-    model = CustomTransformerModel(encoder, config["dataloader"]
-                                ["num_classes"], nheads=config["model"]["nheads"], nlayer=config["model"]["nlayers"], device=device)
-    print("Model created")
-    model.to(device)
-    total_params, trainable_params = count_parameters(model)
-    # Print the number of parameters, but with . notation for better readability
-    print(f"Total parameters: {total_params:,}, Trainable parameters: {trainable_params:,}, Share of trainable: {trainable_params / total_params:.2%}")
-    loss_fn = torch.nn.CrossEntropyLoss(label_smoothing=config["optimizer"]["epsilon"])
-    lr = config["optimizer"]["lr"]
-    target_lr = config["optimizer"]["lr_target"]
-    initial_lr = config["optimizer"]["lr_initial"]
-    optimizer = torch.optim.AdamW(model.parameters(), lr=initial_lr, weight_decay=config["optimizer"]["weight_decay"])
 
     losses = []
     accuracies = []
     test_accuracies = []
     writer.log_hyperparameters(config)
     print("Starting training")
-    epoch_progress = trange(EPOCHS)
+    epoch_progress = trange(start_epoch, EPOCHS)
     best_loss = float("inf")
 
-    for epoch in range(EPOCHS):
+    for epoch in range(start_epoch, EPOCHS):
         if epoch < 60:
             current_lr = initial_lr + (lr - initial_lr) * (epoch / 60)
         elif epoch > 200:
@@ -188,6 +209,12 @@ if __name__=="__main__":
         if avg_loss < best_loss:
             best_loss = avg_loss
             writer.save_model(model=model, filename="best_model.pt")
+        checkpoint = {
+            "epoch": epoch,
+            "model_state": model.state_dict(),
+            "optimizer_state": optimizer.state_dict(),
+        }
+        writer.save_checkpoint(checkpoint)
     epoch_progress.close()
     writer.save_model(model=model, filename="final_model.pt")
 

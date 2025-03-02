@@ -1,3 +1,4 @@
+import re
 import os
 from datetime import datetime
 from collections import defaultdict
@@ -8,15 +9,18 @@ import torch
 from pprint import pprint
 
 class SummaryWriter:
-    def __init__(self, directory="./runs/", runname=None):
+    def __init__(self, directory="./runs/", runname=None, runfolder=None):
         """
         Initialize the SummaryWriter with metrics to track.
         
         :param metrics: Names of metrics to track as strings.
         """
         self.pardir = directory
-        self.runname = runname + "_" + datetime.now().strftime(
-            '%Y%m%d_%H%M%S') if runname else datetime.now().strftime('%Y%m%d_%H%M%S')
+        if runfolder:
+            self.runname = runfolder
+        else:
+            self.runname = runname + "_" + datetime.now().strftime(
+                '%Y%m%d_%H%M%S') if runname else datetime.now().strftime('%Y%m%d_%H%M%S')
         self.rundir = os.path.join(
             directory, self.runname)
         self.params = dict()
@@ -87,6 +91,10 @@ class SummaryWriter:
         torch.save(model.state_dict(), save_path)
         print(f"Model saved to {save_path}")
     
+    def save_checkpoint(self, checkpoint: dict, filename: str = "checkpoint.pt"):
+        save_path = os.path.join(self.rundir, filename)
+        torch.save(checkpoint, save_path)
+    
     def flush(self):
         is_new_file = not os.path.exists(self.batch_csv_path)
         with open(self.batch_csv_path, mode="a", newline="") as f:
@@ -117,6 +125,37 @@ class SummaryWriter:
         self.flush()
         print("SummaryWriter closed.")
         
+
+def find_latest_run_directory(base_output_dir, runname):
+    """
+    Finds the latest run directory matching the pattern '[runname]_[YYYYMMDD_HHMMSS]'.
+
+    Args:
+        base_output_dir (str): The parent directory where runs are stored.
+        runname (str): The base name of the run (e.g., experiment name).
+
+    Returns:
+        str: The path to the latest run directory or None if no match is found.
+    """
+    # Regex pattern for directories in the format 'runname_YYYYMMDD_HHMMSS'
+    pattern = re.compile(rf"^{re.escape(runname)}_\d{{8}}_\d{{6}}$")
+
+    matching_dirs = [
+        d for d in os.listdir(base_output_dir)
+        if pattern.match(d) and os.path.isdir(os.path.join(base_output_dir, d))
+    ]
+
+    if not matching_dirs:
+        return None  # No previous runs found
+
+    # Sort by date-time extracted from the directory names
+    matching_dirs.sort(
+        key=lambda x: datetime.strptime(x[len(runname) + 1:], "%Y%m%d_%H%M%S"),
+        reverse=True
+    )
+
+    return matching_dirs[0]
+
 
 class Timer:
     def __init__(self):
