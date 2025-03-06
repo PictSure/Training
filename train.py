@@ -56,21 +56,24 @@ if __name__=="__main__":
     optimizer = torch.optim.AdamW(model.parameters(
     ), lr=initial_lr, weight_decay=config["optimizer"]["weight_decay"])
     start_epoch = 0
+    best_loss = float("inf")
     if args.new:
         writer = SummaryWriter(
             directory=config["paths"]["output"], runname=config["name"])
     else:
         run_dir = find_latest_run_directory(
             config["paths"]["output"], config["name"])
-        if run_dir:
+        checkpoint_path = os.path.join(
+            config["paths"]["output"], run_dir, "checkpoint.pt")
+        if run_dir and os.path.exists(checkpoint_path):
             print(f"Resuming from: {run_dir}")
             # Resume logging in the same directory
             writer = SummaryWriter(directory=config["paths"]["output"], runfolder=run_dir)
-            checkpoint_path = os.path.join(config["paths"]["output"], run_dir, "checkpoint.pt")
             checkpoint = torch.load(checkpoint_path, map_location=device)
             model.load_state_dict(checkpoint["model_state"])
             optimizer.load_state_dict(checkpoint["optimizer_state"])
             start_epoch = checkpoint["epoch"]
+            best_loss = checkpoint["best_loss"] if "best_loss" in checkpoint.keys() else 10
         else:
             print("No checkpoint found. Starting a new run...")
             writer = SummaryWriter(
@@ -84,8 +87,10 @@ if __name__=="__main__":
     training_loader = get_cluster_random_loader(
         root=os.path.join(config["paths"]["dataset"], config["paths"]["train"]), batch_size=config["dataloader"]["batch_size"], num_classes=config["dataloader"]["num_classes"], num_samples=config["dataloader"]["num_samples"], num_images=config["dataloader"]["num_images"], mini=False, num_workers=config["dataloader"]["num_workers"], ratio=config["dataloader"]["train_ratio"])
     test_loader = get_cluster_random_loader(
-        root=os.path.join(config["paths"]["dataset"], config["paths"]["test"]), batch_size=config["dataloader"]["batch_size"], num_classes=config["dataloader"]["num_classes"], num_samples=500, num_images=config["dataloader"]["num_images"], mini=True, num_workers=config["dataloader"]["num_workers"], ratio=config["dataloader"]["test_ratio"])
+        root=os.path.join(config["paths"]["dataset"], config["paths"]["test"]), batch_size=config["dataloader"]["batch_size"], num_classes=5, num_samples=500, num_images=5, mini=True, num_workers=config["dataloader"]["num_workers"], ratio=config["dataloader"]["test_ratio"])
     test_loader.dataset.build_image_index()
+    if not args.new and start_epoch > 0 and start_epoch % 30 != 0:
+        training_loader.build_image_index()
     print("DataLoader created")
     # training_loader = get_imagenet_random_loader(root=config["paths"]["dataset"], batch_size=config["dataloader"]["batch_size"], num_classes=config["dataloader"]["num_classes"], num_samples=10000,
     #                                              num_images=config["dataloader"]["num_images"], train=True, exclude_images=test_classes, mini=False, num_workers=config["dataloader"]["worker"])
@@ -101,7 +106,6 @@ if __name__=="__main__":
     writer.log_hyperparameters(config)
     print("Starting training")
     epoch_progress = trange(start_epoch, EPOCHS)
-    best_loss = float("inf")
 
     for epoch in range(start_epoch, EPOCHS):
         if epoch < 60:
@@ -213,6 +217,7 @@ if __name__=="__main__":
             "epoch": epoch,
             "model_state": model.state_dict(),
             "optimizer_state": optimizer.state_dict(),
+            "best_loss": best_loss
         }
         writer.save_checkpoint(checkpoint)
     epoch_progress.close()
