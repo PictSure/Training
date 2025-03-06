@@ -55,6 +55,7 @@ if __name__=="__main__":
     initial_lr = config["optimizer"]["lr_initial"]
     optimizer = torch.optim.AdamW(model.parameters(
     ), lr=initial_lr, weight_decay=config["optimizer"]["weight_decay"])
+
     start_epoch = 0
     best_loss = float("inf")
     if args.new:
@@ -99,6 +100,10 @@ if __name__=="__main__":
 
 
     EPOCHS = config["optimizer"]["epochs"]
+    scheduler = torch.optim.lr_scheduler.LambdaLR(
+        optimizer, 
+        lr_lambda=lambda epoch: initial_lr + (lr - initial_lr) * (epoch / 50) if epoch < 50 else lr - (lr - target_lr) * ((epoch - 50) / (EPOCHS - 50))
+    )
 
     losses = []
     accuracies = []
@@ -108,14 +113,7 @@ if __name__=="__main__":
     epoch_progress = trange(start_epoch, EPOCHS)
 
     for epoch in range(start_epoch, EPOCHS):
-        if epoch < 60:
-            current_lr = initial_lr + (lr - initial_lr) * (epoch / 60)
-        elif epoch > 200:
-            current_lr = lr - (lr - target_lr) * ((epoch - 200) / 500)
-        else:
-            current_lr = lr
-        for param_group in optimizer.param_groups:
-            param_group['lr'] = current_lr
+        scheduler.step()
         
         total_correct = 0
         total_samples = 0
