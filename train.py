@@ -3,6 +3,7 @@ from utils.data_loader_imagenet import normalize_samples, get_cluster_random_loa
 from utils.util import count_parameters
 from model.model_PictSure import CustomTransformerModel, EmbeddingWrapper, ResNetWrapper
 from utils.summary_writer import SummaryWriter, find_latest_run_directory
+from utils.lr_scheduler import CustomLRScheduler
 from torch.nn.utils import clip_grad_norm_
 import yaml
 from tqdm import trange
@@ -91,7 +92,7 @@ if __name__=="__main__":
         root=os.path.join(config["paths"]["dataset"], config["paths"]["test"]), batch_size=config["dataloader"]["batch_size"], num_classes=5, num_samples=500, num_images=5, mini=True, num_workers=config["dataloader"]["num_workers"], ratio=config["dataloader"]["test_ratio"])
     test_loader.dataset.build_image_index()
     if not args.new and start_epoch > 0 and start_epoch % 30 != 0:
-        training_loader.build_image_index()
+        training_loader.dataset.build_image_index()
     print("DataLoader created")
     # training_loader = get_imagenet_random_loader(root=config["paths"]["dataset"], batch_size=config["dataloader"]["batch_size"], num_classes=config["dataloader"]["num_classes"], num_samples=10000,
     #                                              num_images=config["dataloader"]["num_images"], train=True, exclude_images=test_classes, mini=False, num_workers=config["dataloader"]["worker"])
@@ -100,10 +101,7 @@ if __name__=="__main__":
 
 
     EPOCHS = config["optimizer"]["epochs"]
-    scheduler = torch.optim.lr_scheduler.LambdaLR(
-        optimizer, 
-        lr_lambda=lambda epoch: initial_lr + (lr - initial_lr) * (epoch / 50) if epoch < 50 else lr - (lr - target_lr) * ((epoch - 50) / (EPOCHS - 50))
-    )
+    scheduler = CustomLRScheduler(optimizer, epochs=EPOCHS, last_epoch=start_epoch-1)
 
     losses = []
     accuracies = []
@@ -113,7 +111,6 @@ if __name__=="__main__":
     epoch_progress = trange(start_epoch, EPOCHS)
 
     for epoch in range(start_epoch, EPOCHS):
-        scheduler.step()
         
         total_correct = 0
         total_samples = 0
@@ -163,6 +160,7 @@ if __name__=="__main__":
         if (batch_idx + 1) % config["optimizer"]["acc_steps"] != 0:
             clip_grad_norm_(model.parameters(), max_norm=0.5)
             optimizer.step()
+            scheduler.step()
             optimizer.zero_grad()
         test_correct = 0
         test_samples = 0
