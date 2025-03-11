@@ -1,0 +1,34 @@
+training_loc: cluster
+
+name: s_inet
+
+resnet: 18
+
+paths:
+  output: /netscratch/schiesser/embed_then_cat/runs/
+  dataset: /netscratch/schiesser/inet/
+  train: imagenet-train2.msgpack
+  test: imagenet-test2.msgpack
+
+model:
+  nheads: 8
+  nlayers: 4
+
+optimizer:
+  lr_initial: 0.000001
+  lr_target: 0.0000001
+  lr: 0.0001
+  epochs: 1200
+  weight_decay: 0.00001
+  log_step: 10
+  epsilon: 0.1
+  acc_steps: 1
+
+dataloader:
+  num_samples: 10000
+  batch_size: 16
+  num_classes: 10
+  num_images: 5
+  train_ratio: 0.1
+  test_ratio: 1
+  num_workers: 16
