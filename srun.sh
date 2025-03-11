@@ -13,7 +13,7 @@ srun \
 --container-workdir="`pwd`" \
 --container-image=/enroot/nvcr.io_nvidia_pytorch_23.06-py3.sqsh \
 --task-prolog="`pwd`/install.sh" \
---gpus=1 --cpus-per-gpu=16 --partition=H100-SEE --mem=205000 --job-name=pictsures --time=3-00:00 \
+--gpus=1 --cpus-per-gpu=16 --partition=H100-SEE --mem=205000 --job-name=pictsures \
 python3 train.py --config ./configs/models/PictSureS.yaml
 
 # M-Model
