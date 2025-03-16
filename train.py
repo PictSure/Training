@@ -18,6 +18,7 @@ if __name__=="__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('--config', '-c', help='Path to config file', default='./configs/slurm.yaml')
     parser.add_argument('--new', '-n', help="Start training from scratch", action="store_true")
+    parser.add_argument('--vc', help="If flag is set, dataset class for variable number of classes is used", action="store_true")
     args = parser.parse_args()
 
 
@@ -87,7 +88,7 @@ if __name__=="__main__":
                     452, 469, 483, 541, 574, 753, 777, 788, 826, 927, 946]
     print("Creating dataloader")
     training_loader = get_cluster_random_loader(
-        root=os.path.join(config["paths"]["dataset"], config["paths"]["train"]), batch_size=config["dataloader"]["batch_size"], num_classes=config["dataloader"]["num_classes"], num_samples=config["dataloader"]["num_samples"], num_images=config["dataloader"]["num_images"], mini=False, num_workers=config["dataloader"]["num_workers"], ratio=config["dataloader"]["train_ratio"])
+        root=os.path.join(config["paths"]["dataset"], config["paths"]["train"]), batch_size=config["dataloader"]["batch_size"], num_classes=config["dataloader"]["num_classes"], num_samples=config["dataloader"]["num_samples"], num_images=config["dataloader"]["num_images"], mini=False, num_workers=config["dataloader"]["num_workers"], ratio=config["dataloader"]["train_ratio"], vc=args.vc)
     test_loader = get_cluster_random_loader(
         root=os.path.join(config["paths"]["dataset"], config["paths"]["test"]), batch_size=config["dataloader"]["batch_size"], num_classes=5, num_samples=500, num_images=5, mini=True, num_workers=config["dataloader"]["num_workers"], ratio=config["dataloader"]["test_ratio"])
     test_loader.dataset.build_image_index()
