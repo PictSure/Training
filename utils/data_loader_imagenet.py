@@ -206,8 +206,7 @@ def get_imagenet_random_loader(
     num_workers=16,
     exclude_images=None,
     include_images=None,
-    mini=False,
-    vc=False
+    mini=False
 ):
     """
     Returns a DataLoader for the ImageNetRandomDataset.
@@ -222,8 +221,7 @@ def get_imagenet_random_loader(
         batch_size (int): Batch size.
         num_workers (int): Number of workers for the DataLoader.
     """
-    if vc:
-        dataset = RandomClassDataDingsSet(
+    dataset = ImageNetRandomDataset(
         root=root,
         num_images=num_images,
         num_samples=num_samples,
@@ -234,18 +232,6 @@ def get_imagenet_random_loader(
         included_classes=include_images,
         mini=mini
     )
-    else: 
-        dataset = ImageNetRandomDataset(
-            root=root,
-            num_images=num_images,
-            num_samples=num_samples,
-            num_classes=num_classes,
-            random_classes=random_classes,
-            train=train,
-            excluded_classes=exclude_images,
-            included_classes=include_images,
-            mini=mini
-        )
 
     loader = torch.utils.data.DataLoader(
         dataset,
@@ -267,7 +253,8 @@ def get_cluster_random_loader(
     batch_size=32,
     num_workers=4,
     mini=False,
-    ratio=0.1
+    ratio=0.1,
+    vc=False
 ):
     """
     Returns a DataLoader for the ImageNetRandomDataset.
@@ -282,7 +269,8 @@ def get_cluster_random_loader(
         batch_size (int): Batch size.
         num_workers (int): Number of workers for the DataLoader.
     """
-    dataset = ImageNetDataDingsSet(
+    if vc:
+        dataset = RandomClassDataDingsSet(
         data_path=root,
         num_images=num_images,
         num_samples=num_samples,
@@ -290,7 +278,17 @@ def get_cluster_random_loader(
         random_classes=random_classes,
         mini=mini,
         ratio=ratio
-    )
+        )
+    else: 
+        dataset = ImageNetDataDingsSet(
+            data_path=root,
+            num_images=num_images,
+            num_samples=num_samples,
+            num_classes=num_classes,
+            random_classes=random_classes,
+            mini=mini,
+            ratio=ratio
+        )
     loader = torch.utils.data.DataLoader(
         dataset,
         batch_size=batch_size,
