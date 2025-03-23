@@ -60,6 +60,7 @@ if __name__=="__main__":
 
     start_epoch = 0
     best_loss = float("inf")
+    best_acc = 0
     if args.new:
         writer = SummaryWriter(
             directory=config["paths"]["output"], runname=config["name"])
@@ -77,6 +78,7 @@ if __name__=="__main__":
             optimizer.load_state_dict(checkpoint["optimizer_state"])
             start_epoch = checkpoint["epoch"]
             best_loss = checkpoint["best_loss"] if "best_loss" in checkpoint.keys() else 10
+            best_acc = checkpoint["best_acc"] if "best_acc" in checkpoint.keys() else 0.5
         else:
             print("No checkpoint found. Starting a new run...")
             writer = SummaryWriter(
@@ -209,12 +211,16 @@ if __name__=="__main__":
         writer.flush()
         if avg_loss < best_loss:
             best_loss = avg_loss
-            writer.save_model(model=model, filename="best_model.pt")
+            writer.save_model(model=model, filename="best_loss_model.pt")
+        if test_acc > best_acc:
+            best_acc = test_acc
+            writer.save_model(model=model, filename="best_acc_model.pt")
         checkpoint = {
             "epoch": epoch,
             "model_state": model.state_dict(),
             "optimizer_state": optimizer.state_dict(),
-            "best_loss": best_loss
+            "best_loss": best_loss,
+            "best_acc": best_acc
         }
         writer.save_checkpoint(checkpoint)
     epoch_progress.close()
