@@ -1,0 +1,36 @@
+training_loc: cluster
+
+name: semantic_s
+
+resnet: 18
+
+paths:
+  output: /netscratch/schiesser/embed_then_cat/runs/
+  dataset: /netscratch/schiesser/inet/
+  train: imagenet21k-train.msgpack
+  test: imagenet21k-test.msgpack
+  hierarchy_path: /netscratch/schiesser/inet/imagenet21k_miil_tree.pth
+  class_index_path: /netscratch/schiesser/inet/inet21k_class_to_idx.json
+
+model:
+  nheads: 8
+  nlayers: 4
+
+optimizer:
+  lr_initial: 0.000001
+  lr_target: 0.0000001
+  lr: 0.0001
+  epochs: 1200
+  weight_decay: 0.00001
+  log_step: 10
+  epsilon: 0.1
+  acc_steps: 1
+
+dataloader:
+  num_samples: 10000
+  batch_size: 16
+  num_classes: 10
+  num_images: 5
+  train_ratio: 0.01
+  test_ratio: 1
+  num_workers: 16

@@ -18,7 +18,9 @@ if __name__=="__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('--config', '-c', help='Path to config file', default='./configs/slurm.yaml')
     parser.add_argument('--new', '-n', help="Start training from scratch", action="store_true")
-    parser.add_argument('--vc', help="If flag is set, dataset class for variable number of classes is used", action="store_true")
+    group = parser.add_mutually_exclusive_group()
+    group.add_argument('--vc', help="If flag is set, dataset class for variable number of classes is used", action="store_true")
+    group.add_argument("-s", "--semantic", help="Use SemanticSimilarity Dataloader", action="store_true")
     args = parser.parse_args()
 
 
@@ -90,11 +92,11 @@ if __name__=="__main__":
                     452, 469, 483, 541, 574, 753, 777, 788, 826, 927, 946]
     print("Creating dataloader")
     training_loader = get_cluster_random_loader(
-        root=os.path.join(config["paths"]["dataset"], config["paths"]["train"]), batch_size=config["dataloader"]["batch_size"], num_classes=config["dataloader"]["num_classes"], num_samples=config["dataloader"]["num_samples"], num_images=config["dataloader"]["num_images"], mini=False, num_workers=config["dataloader"]["num_workers"], ratio=config["dataloader"]["train_ratio"], vc=args.vc)
+        root=os.path.join(config["paths"]["dataset"], config["paths"]["train"]), batch_size=config["dataloader"]["batch_size"], num_classes=config["dataloader"]["num_classes"], num_samples=config["dataloader"]["num_samples"], num_images=config["dataloader"]["num_images"], mini=False, num_workers=config["dataloader"]["num_workers"], ratio=config["dataloader"]["train_ratio"], vc=args.vc, semantic=args.semantic, hierarchy_path=config["paths"].get("hierarchy_path"), class_index_path=config["paths"].get("class_index_path"))
     test_loader = get_cluster_random_loader(
         root=os.path.join(config["paths"]["dataset"], config["paths"]["test"]), batch_size=config["dataloader"]["batch_size"], num_classes=5, num_samples=500, num_images=5, mini=True, num_workers=config["dataloader"]["num_workers"], ratio=config["dataloader"]["test_ratio"])
     test_loader.dataset.build_image_index()
-    if not args.new and start_epoch > 0 and start_epoch % 30 != 0:
+    if not args.new and not args.semantic and start_epoch > 0 and start_epoch % 30 != 0:
         training_loader.dataset.build_image_index()
     print("DataLoader created")
     # training_loader = get_imagenet_random_loader(root=config["paths"]["dataset"], batch_size=config["dataloader"]["batch_size"], num_classes=config["dataloader"]["num_classes"], num_samples=10000,
@@ -118,8 +120,10 @@ if __name__=="__main__":
         total_correct = 0
         total_samples = 0
         total_loss = 0
-        if epoch % 30 == 0:
+        if epoch % 30 == 0 and not args.semantic:
             training_loader.dataset.build_image_index()
+        elif args.semantic:
+            training_loader.resample()
 
         model.train(True)
         size = len(training_loader)

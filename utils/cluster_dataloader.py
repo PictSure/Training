@@ -295,7 +295,7 @@ class SemanticSimilarityDataDingsSet(Dataset):
         self.resample_counter = 0
 
         with open(class_index_path, "r") as f:
-            self.label_to_idx = json.loads(f)
+            self.label_to_idx = json.load(f)
         
         self.device = (
             "cuda"
@@ -408,7 +408,8 @@ class SemanticSimilarityDataDingsSet(Dataset):
         children = []
         counter = 0
         condition_met = False
-        while counter <= 0:
+
+        while counter <= 5:
             if len(children) < 2:
                 children = self._get_random_class_children()
                 children = [self.label_to_idx[child] for child in children]

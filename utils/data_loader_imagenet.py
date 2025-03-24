@@ -4,7 +4,7 @@ import random
 import numpy as np
 from torchvision import transforms, datasets
 import torch.nn.functional as F
-from utils.cluster_dataloader import ImageNetDataDingsSet, RandomClassDataDingsSet
+from utils.cluster_dataloader import ImageNetDataDingsSet, RandomClassDataDingsSet, SemanticSimilarityDataDingsSet
 from tqdm import tqdm
 from collections import defaultdict
 from PIL import Image
@@ -254,7 +254,10 @@ def get_cluster_random_loader(
     num_workers=4,
     mini=False,
     ratio=0.1,
-    vc=False
+    vc=False,
+    semantic=False,
+    hierarchy_path=None,
+    class_index_path=None
 ):
     """
     Returns a DataLoader for the ImageNetRandomDataset.
@@ -278,6 +281,17 @@ def get_cluster_random_loader(
         random_classes=random_classes,
         mini=mini,
         ratio=ratio
+        )
+    elif semantic:
+        dataset = SemanticSimilarityDataDingsSet(
+            data_path=root,
+            hierarchy_path=hierarchy_path,
+            class_index_path=class_index_path,
+            num_images=num_images,
+            num_classes=num_classes,
+            ratio=ratio,
+            mini=mini,
+            num_samples=num_samples
         )
     else: 
         dataset = ImageNetDataDingsSet(
