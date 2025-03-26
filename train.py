@@ -123,7 +123,7 @@ if __name__=="__main__":
         if epoch % 30 == 0 and not args.semantic:
             training_loader.dataset.build_image_index()
         elif args.semantic:
-            training_loader.resample()
+            training_loader.dataset.resample()
 
         model.train(True)
         size = len(training_loader)

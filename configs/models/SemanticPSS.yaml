@@ -6,7 +6,7 @@ resnet: 18
 
 paths:
   output: /netscratch/schiesser/embed_then_cat/runs/
-  dataset: /netscratch/schiesser/inet/
+  dataset: /netscratch/schiesser/inet2/
   train: imagenet21k-train.msgpack
   test: imagenet21k-test.msgpack
   hierarchy_path: /netscratch/schiesser/inet/imagenet21k_miil_tree.pth
