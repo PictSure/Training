@@ -33,6 +33,7 @@ if __name__=="__main__":
         else "cpu"
     )
     print(f"Using {device} device")
+    # set up encoder
     if config.get("resnet"):
         classifier = (
             models.resnet18(pretrained=config["resnet"]["pretrained"])
@@ -59,12 +60,13 @@ if __name__=="__main__":
     initial_lr = float(config["optimizer"]["lr_initial"])
     optimizer = torch.optim.AdamW(model.parameters(
     ), lr=initial_lr, weight_decay=float(config["optimizer"]["weight_decay"]))
+    # if ViT encoder separate encoder block from rest of model to allow for different learning rates
     if config.get("visnet"):
         encoder_params = list(encoder.parameters())
         encoder_param_ids = {id(param) for param in encoder_params}
         other_params = [param for param in model.parameters() if id(param) not in encoder_param_ids]
         for param in encoder.parameters():
-            param.requires_grad = True
+            param.requires_grad = not config["visnet"]["pretrained"]
 
         optimizer = torch.optim.AdamW([
             {'params': encoder_params, 'lr': target_lr},  # Apply a smaller learning rate to the encoder
@@ -78,6 +80,7 @@ if __name__=="__main__":
         writer = SummaryWriter(
             directory=config["paths"]["output"], runname=config["name"])
     else:
+        # find latest/most recent run directory and load model and optimizer state
         run_dir = find_latest_run_directory(
             config["paths"]["output"], config["name"])
         checkpoint_path = os.path.join(
@@ -115,6 +118,7 @@ if __name__=="__main__":
     scheduler = CustomLRScheduler(
         optimizer=optimizer,
         epochs=EPOCHS,
+        # when ViT encoder: applys learning rate schedule only to non encoder part and leaves encoder's lr constant
         param_group_index=1 if config.get("visnet") else None,
         last_epoch=start_epoch-1
     )
@@ -133,6 +137,10 @@ if __name__=="__main__":
         total_loss = 0
         if epoch % 30 == 0:
             training_loader.dataset.build_image_index()
+        
+        if config["visnet"]["pretrained"] and epoch == 100:
+            for param in encoder.parameters():
+                    param.requires_grad = True
 
         model.train(True)
         size = len(training_loader)

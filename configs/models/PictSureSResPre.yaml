@@ -5,7 +5,6 @@ name: s_resnet_pretrained
 resnet: 
   type: 18
   pretrained: true
-visnet: false
 
 paths:
   output: /netscratch/schiesser/embed_then_cat/runs/

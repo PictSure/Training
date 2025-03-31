@@ -3,7 +3,8 @@ training_loc: cluster
 name: s_visnet_pretrained
 
 
-visnet: true
+visnet:
+  pretrained: true
 
 paths:
   output: /netscratch/schiesser/embed_then_cat/runs/
