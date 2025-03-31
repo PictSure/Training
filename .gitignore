@@ -124,3 +124,4 @@ dmypy.json
 output/*
 .vscode/
 runs/
+inet21k_class_to_idx.json
