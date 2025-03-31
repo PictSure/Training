@@ -2,6 +2,7 @@ import torch
 from utils.data_loader_imagenet import normalize_samples, get_cluster_random_loader
 from utils.util import count_parameters
 from model.model_PictSure import CustomTransformerModel, EmbeddingWrapper, ResNetWrapper
+from model.pretrained_viznet import VizNetWrapper
 from utils.summary_writer import SummaryWriter, find_latest_run_directory
 from utils.lr_scheduler import CustomLRScheduler
 from torch.nn.utils import clip_grad_norm_
@@ -18,9 +19,6 @@ if __name__=="__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('--config', '-c', help='Path to config file', default='./configs/slurm.yaml')
     parser.add_argument('--new', '-n', help="Start training from scratch", action="store_true")
-    group = parser.add_mutually_exclusive_group()
-    group.add_argument('--vc', help="If flag is set, dataset class for variable number of classes is used", action="store_true")
-    group.add_argument("-s", "--semantic", help="Use SemanticSimilarity Dataloader", action="store_true")
     args = parser.parse_args()
 
 
@@ -35,14 +33,17 @@ if __name__=="__main__":
         else "cpu"
     )
     print(f"Using {device} device")
-    classifier = (
-        models.resnet18(pretrained=True)
-        if config["resnet"] == 18
-        else models.resnet34(pretrained=True)
-        if config["resnet"] == 34
-        else models.resnet50(pretrained=True)
-    )
-    encoder = ResNetWrapper(classifier)
+    if config.get("resnet"):
+        classifier = (
+            models.resnet18(pretrained=config["resnet"]["pretrained"])
+            if config["resnet"]["type"] == 18
+            else models.resnet34(pretrained=config["resnet"]["pretrained"])
+            if config["resnet"]["type"] == 34
+            else models.resnet50(pretrained=config["resnet"]["pretrained"])
+        )
+        encoder = ResNetWrapper(classifier)
+    else: 
+        encoder = VizNetWrapper(path=config["paths"]["visnet_weights"], device=device).to(device)
 
     model = CustomTransformerModel(encoder, config["dataloader"]
                                    ["num_classes"], nheads=config["model"]["nheads"], nlayer=config["model"]["nlayers"], device=device)
@@ -54,11 +55,21 @@ if __name__=="__main__":
         f"Total parameters: {total_params:,}, Trainable parameters: {trainable_params:,}, Share of trainable: {trainable_params / total_params:.2%}")
     loss_fn = torch.nn.CrossEntropyLoss(
         label_smoothing=config["optimizer"]["epsilon"])
-    lr = config["optimizer"]["lr"]
-    target_lr = config["optimizer"]["lr_target"]
-    initial_lr = config["optimizer"]["lr_initial"]
+    target_lr = float(config["optimizer"]["lr_target"])
+    initial_lr = float(config["optimizer"]["lr_initial"])
     optimizer = torch.optim.AdamW(model.parameters(
-    ), lr=initial_lr, weight_decay=config["optimizer"]["weight_decay"])
+    ), lr=initial_lr, weight_decay=float(config["optimizer"]["weight_decay"]))
+    if config.get("visnet"):
+        encoder_params = list(encoder.parameters())
+        encoder_param_ids = {id(param) for param in encoder_params}
+        other_params = [param for param in model.parameters() if id(param) not in encoder_param_ids]
+        for param in encoder.parameters():
+            param.requires_grad = True
+
+        optimizer = torch.optim.AdamW([
+            {'params': encoder_params, 'lr': initial_lr},  # Apply a smaller learning rate to the encoder
+            {'params': other_params, 'lr': initial_lr}          # Apply the default learning rate to the rest of the model
+        ], weight_decay=float(config["optimizer"]["weight_decay"]))
 
     start_epoch = 0
     best_loss = float("inf")
@@ -92,21 +103,21 @@ if __name__=="__main__":
                     452, 469, 483, 541, 574, 753, 777, 788, 826, 927, 946]
     print("Creating dataloader")
     training_loader = get_cluster_random_loader(
-        root=os.path.join(config["paths"]["dataset"], config["paths"]["train"]), batch_size=config["dataloader"]["batch_size"], num_classes=config["dataloader"]["num_classes"], num_samples=config["dataloader"]["num_samples"], num_images=config["dataloader"]["num_images"], mini=False, num_workers=config["dataloader"]["num_workers"], ratio=config["dataloader"]["train_ratio"], vc=args.vc, semantic=args.semantic, hierarchy_path=config["paths"].get("hierarchy_path"), class_index_path=config["paths"].get("class_index_path"))
+        root=os.path.join(config["paths"]["dataset"], config["paths"]["train"]), batch_size=config["dataloader"]["batch_size"], num_classes=config["dataloader"]["num_classes"], num_samples=config["dataloader"]["num_samples"], num_images=config["dataloader"]["num_images"], mini=False, num_workers=config["dataloader"]["num_workers"], ratio=config["dataloader"]["train_ratio"])
     test_loader = get_cluster_random_loader(
         root=os.path.join(config["paths"]["dataset"], config["paths"]["test"]), batch_size=config["dataloader"]["batch_size"], num_classes=5, num_samples=500, num_images=5, mini=True, num_workers=config["dataloader"]["num_workers"], ratio=config["dataloader"]["test_ratio"])
     test_loader.dataset.build_image_index()
-    if not args.new and not args.semantic and start_epoch > 0 and start_epoch % 30 != 0:
+    if not args.new and start_epoch > 0 and start_epoch % 30 != 0:
         training_loader.dataset.build_image_index()
     print("DataLoader created")
-    # training_loader = get_imagenet_random_loader(root=config["paths"]["dataset"], batch_size=config["dataloader"]["batch_size"], num_classes=config["dataloader"]["num_classes"], num_samples=10000,
-    #                                              num_images=config["dataloader"]["num_images"], train=True, exclude_images=test_classes, mini=False, num_workers=config["dataloader"]["worker"])
-    # test_loader = get_imagenet_random_loader(root=config["paths"]["dataset"], batch_size=config["dataloader"]["batch_size"], num_classes=config["dataloader"]["num_classes"],
-    #                                          num_samples=10000, num_images=config["dataloader"]["num_images"], train=True, include_images=test_classes, mini=True, num_workers=config["dataloader"]["worker"])
-
 
     EPOCHS = config["optimizer"]["epochs"]
-    scheduler = CustomLRScheduler(optimizer, epochs=EPOCHS, last_epoch=start_epoch-1)
+    scheduler = CustomLRScheduler(
+        optimizer=optimizer,
+        epochs=EPOCHS,
+        param_group_index=1 if config.get("visnet") else None,
+        last_epoch=start_epoch-1
+    )
 
     losses = []
     accuracies = []
@@ -120,10 +131,8 @@ if __name__=="__main__":
         total_correct = 0
         total_samples = 0
         total_loss = 0
-        if epoch % 30 == 0 and not args.semantic:
+        if epoch % 30 == 0:
             training_loader.dataset.build_image_index()
-        elif args.semantic:
-            training_loader.dataset.resample()
 
         model.train(True)
         size = len(training_loader)
@@ -229,27 +238,5 @@ if __name__=="__main__":
         writer.save_checkpoint(checkpoint)
     epoch_progress.close()
     writer.save_model(model=model, filename="final_model.pt")
-
-    smoothed_losses = pd.Series(losses).rolling(window=4).mean()
-    smoothed_accuracies = pd.Series(accuracies).rolling(window=4).mean()
-    smoothed_test_accuracies = pd.Series(test_accuracies).rolling(window=2).mean()
-
-    fig, ax1 = plt.subplots(figsize=(10, 5))
-
-    ax1.set_xlabel('Epoch')
-    ax1.set_ylabel('Loss', color='tab:blue')
-    ax1.plot(smoothed_accuracies, label='Loss', color='tab:blue')
-    ax1.tick_params(axis='y', labelcolor='tab:blue')
-
-    ax2 = ax1.twinx()
-    ax2.set_ylabel('Accuracy', color='tab:orange')
-    ax2.plot(smoothed_test_accuracies, label='Test Accuracy', color='tab:orange')
-    ax2.tick_params(axis='y', labelcolor='tab:orange')
-
-    fig.tight_layout()
-    fig.suptitle('Accuracy vs. Epoch for different batch sizes')
-    ax1.grid(True)
-
-    writer.save_figure(fig, "train_loss_acc.jpg")
     writer.close()
 
