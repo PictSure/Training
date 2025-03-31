@@ -67,7 +67,7 @@ if __name__=="__main__":
             param.requires_grad = True
 
         optimizer = torch.optim.AdamW([
-            {'params': encoder_params, 'lr': initial_lr},  # Apply a smaller learning rate to the encoder
+            {'params': encoder_params, 'lr': target_lr},  # Apply a smaller learning rate to the encoder
             {'params': other_params, 'lr': initial_lr}          # Apply the default learning rate to the rest of the model
         ], weight_decay=float(config["optimizer"]["weight_decay"]))
 
@@ -176,8 +176,8 @@ if __name__=="__main__":
         if (batch_idx + 1) % config["optimizer"]["acc_steps"] != 0:
             clip_grad_norm_(model.parameters(), max_norm=0.5)
             optimizer.step()
-            scheduler.step()
             optimizer.zero_grad()
+        
         test_correct = 0
         test_samples = 0
         with torch.no_grad():
@@ -218,8 +218,10 @@ if __name__=="__main__":
                 epoch+1, EPOCHS, avg_loss, accuracy, test_acc, avg_grad_norm
             )
         )
+        scheduler.step()
+
         writer.log_epoch_metrics("train", epoch, {
-            "loss": avg_loss, "acc": accuracy, "test_acc": test_acc, "avg_grad_norm": avg_grad_norm
+            "loss": avg_loss, "acc": accuracy, "test_acc": test_acc, "avg_grad_norm": avg_grad_norm, "lrs": [param_group["lr"] for param_group in optimizer.param_groups]
         })
         writer.flush()
         if avg_loss < best_loss:
