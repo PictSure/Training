@@ -1,21 +1,26 @@
 training_loc:
 
-resnet: 
+resnet:
+  type:
+  pretrained: 
+visnet: 
 
 name: 
 
 paths:
   output:
   dataset:
+  train:
+  test:
+  visnet_weights:
 
 model:
   nheads:
   nlayers:
 
 optimizer:
-  lr_initial:
-  lr_target:
-  lr:
+  lr_initial: # lr_max
+  lr_target: # lr_min
   epochs:
   weight_decay:
   log_step:
@@ -27,3 +32,6 @@ dataloader:
   batch_size:
   num_classes:
   num_images:
+  train_ratio: 
+  test_ratio:
+  num_workers:

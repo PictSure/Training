@@ -1,34 +1,35 @@
 training_loc: "local"
 
-resnet: 18
+
+visnet: false
 
 name: test
 
 paths:
   output: output/
-  dataset: /Volumes/DFKI117/
-  train: imagenet21k-train.msgpack
-  test: imagenet21k-test.msgpack
+  dataset: ./data
+  train: imagenet-train2.msgpack
+  test: imagenet-test2.msgpack
+  visnet_weights: ./weights/vit_triplet_imagenet.pth
 
 model:
   nheads: 4
   nlayers: 8
 
 optimizer:
-  lr_initial: 0.000001
-  lr_target: 0.0000001
-  lr: 0.001
+  lr_initial: 5e-4 # lr_max
+  lr_target: 5e-5 # lr_min
   epochs: 1
-  weight_decay: 0.00001
-  log_step: 500
+  weight_decay: 1e-5
+  log_step: 10
   epsilon: 0.1
   acc_steps: 8
 
 dataloader:
   num_samples: 10000
-  batch_size: 16
+  batch_size: 8
   num_classes: 5
   num_images: 10
-  train_ratio: 0.01
+  train_ratio: 0.02
   test_ratio: 1
   num_workers: 0

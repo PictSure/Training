@@ -1,25 +1,28 @@
 training_loc: cluster
 
-name: s
+name: s_resnet_pretrained
 
-resnet: 18
+resnet: 
+  type: 18
+  pretrained: true
+visnet: false
 
 paths:
   output: /netscratch/schiesser/embed_then_cat/runs/
   dataset: /netscratch/schiesser/inet/
   train: imagenet21k-train.msgpack
   test: imagenet21k-test.msgpack
+  visnet_weights: /netscratch/schiesser/embed_then_cat/vit_triplet_imagenet.pth
 
 model:
   nheads: 8
   nlayers: 4
 
 optimizer:
-  lr_initial: 0.000001
-  lr_target: 0.0000001
-  lr: 0.0001
-  epochs: 1200
-  weight_decay: 0.00001
+  lr_initial: 5e-4
+  lr_target: 5e-5
+  epochs: 600
+  weight_decay: 1e-5
   log_step: 10
   epsilon: 0.1
   acc_steps: 1
