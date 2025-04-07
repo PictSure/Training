@@ -33,14 +33,14 @@ if __name__=="__main__":
         else "cpu"
     )
     print(f"Using {device} device")
-    # set up encoder
+    # set up encoderv
     if config.get("resnet"):
         classifier = (
-            models.resnet18(pretrained=config["resnet"]["pretrained"])
-            if config["resnet"]["type"] == 18
-            else models.resnet34(pretrained=config["resnet"]["pretrained"])
-            if config["resnet"]["type"] == 34
-            else models.resnet50(pretrained=config["resnet"]["pretrained"])
+            models.resnet18(pretrained=config.get("pretrained", None))
+            if config["resnet"] == 18
+            else models.resnet34(pretrained=config.get("pretrained", None))
+            if config["resnet"] == 34
+            else models.resnet50(pretrained=config.get("pretrained", None))
         )
         encoder = ResNetWrapper(classifier)
     else: 
@@ -60,20 +60,20 @@ if __name__=="__main__":
     initial_lr = float(config["optimizer"]["lr_initial"])
     optimizer = torch.optim.AdamW(model.parameters(
     ), lr=initial_lr, weight_decay=float(config["optimizer"]["weight_decay"]))
+    start_epoch = 0
     # if ViT encoder separate encoder block from rest of model to allow for different learning rates
-    if config.get("visnet"):
+    if config.get("pretrained"):
         encoder_params = list(encoder.parameters())
         encoder_param_ids = {id(param) for param in encoder_params}
         other_params = [param for param in model.parameters() if id(param) not in encoder_param_ids]
+
         for param in encoder.parameters():
-            param.requires_grad = not config["visnet"]["pretrained"]
+            param.requires_grad = config["pretrained"]["from_start"]
 
         optimizer = torch.optim.AdamW([
             {'params': encoder_params, 'lr': target_lr},  # Apply a smaller learning rate to the encoder
             {'params': other_params, 'lr': initial_lr}          # Apply the default learning rate to the rest of the model
         ], weight_decay=float(config["optimizer"]["weight_decay"]))
-
-    start_epoch = 0
     best_loss = float("inf")
     best_acc = 0
     if args.new:
@@ -113,13 +113,16 @@ if __name__=="__main__":
     if not args.new and start_epoch > 0 and start_epoch % 30 != 0:
         training_loader.dataset.build_image_index()
     print("DataLoader created")
+    if config.get("pretrained") and start_epoch >= 100:
+            for param in encoder.parameters():
+                    param.requires_grad = True
 
     EPOCHS = config["optimizer"]["epochs"]
     scheduler = CustomLRScheduler(
         optimizer=optimizer,
         epochs=EPOCHS,
         # when ViT encoder: applys learning rate schedule only to non encoder part and leaves encoder's lr constant
-        param_group_index=1 if config.get("visnet") else None,
+        param_group_index=None if config.get("pretrained", {}).get("all") else 1,
         last_epoch=start_epoch-1
     )
 
@@ -138,9 +141,9 @@ if __name__=="__main__":
         if epoch % 30 == 0:
             training_loader.dataset.build_image_index()
         
-        if config["visnet"]["pretrained"] and epoch == 100:
-            for param in encoder.parameters():
-                    param.requires_grad = True
+        if epoch == 100 and config.get("pretrained"):
+                for param in encoder.parameters():
+                        param.requires_grad = True
 
         model.train(True)
         size = len(training_loader)
@@ -229,7 +232,7 @@ if __name__=="__main__":
         scheduler.step()
 
         writer.log_epoch_metrics("train", epoch, {
-            "loss": avg_loss, "acc": accuracy, "test_acc": test_acc, "avg_grad_norm": avg_grad_norm, "lrs": [param_group["lr"] for param_group in optimizer.param_groups]
+            "loss": avg_loss, "acc": accuracy, "test_acc": test_acc, "avg_grad_norm": avg_grad_norm, "lrs": [param_group["lr"] if any(p.requires_grad for p in param_group["params"]) else None for param_group in optimizer.param_groups]
         })
         writer.flush()
         if avg_loss < best_loss:

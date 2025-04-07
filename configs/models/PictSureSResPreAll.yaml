@@ -1,10 +1,10 @@
 training_loc: cluster
 
-name: s_resnet_pretrained
+name: s_resnet_pretrained_all
 
 resnet: 18
 pretrained: 
-  all: false
+  all: true
   from_start: false
 
 paths:

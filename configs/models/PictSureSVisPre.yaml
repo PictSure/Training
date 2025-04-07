@@ -4,7 +4,9 @@ name: s_visnet_pretrained
 
 
 visnet:
-  pretrained: true
+pretrained: 
+  all: false
+  from_start: false
 
 paths:
   output: /netscratch/schiesser/embed_then_cat/runs/
@@ -28,7 +30,7 @@ optimizer:
 
 dataloader:
   num_samples: 10000
-  batch_size: 12
+  batch_size: 10
   num_classes: 10
   num_images: 5
   train_ratio: 0.01

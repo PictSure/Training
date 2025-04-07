@@ -1,10 +1,11 @@
 training_loc: cluster
 
-name: s_resnet_pretrained
+name: s_visnet_pretrained_all
 
-resnet: 18
+
+visnet:
 pretrained: 
-  all: false
+  all: true
   from_start: false
 
 paths:
@@ -29,9 +30,9 @@ optimizer:
 
 dataloader:
   num_samples: 10000
-  batch_size: 16
+  batch_size: 10
   num_classes: 10
   num_images: 5
   train_ratio: 0.01
   test_ratio: 1
-  num_workers: 16
+  num_workers: 8
