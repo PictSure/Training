@@ -36,3 +36,5 @@ dataloader:
   train_ratio: 0.01
   test_ratio: 1
   num_workers: 8
+
+resample: 10
