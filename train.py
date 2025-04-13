@@ -36,11 +36,11 @@ if __name__=="__main__":
     # set up encoderv
     if config.get("resnet"):
         classifier = (
-            models.resnet18(pretrained=config.get("pretrained", None))
+            models.resnet18(pretrained=True if config.get("pretrained", None) else None)
             if config["resnet"] == 18
-            else models.resnet34(pretrained=config.get("pretrained", None))
+            else models.resnet34(pretrained=True if config.get("pretrained", None) else None)
             if config["resnet"] == 34
-            else models.resnet50(pretrained=config.get("pretrained", None))
+            else models.resnet50(pretrained=True if config.get("pretrained", None) else None)
         )
         encoder = ResNetWrapper(classifier)
     else: 
@@ -100,7 +100,7 @@ if __name__=="__main__":
             writer = SummaryWriter(
                 directory=config["paths"]["output"], runname=config["name"])
 
-
+    resample_rate = config.get("resample", 30)
 
     test_classes = [87, 155, 178, 181, 199, 217, 284, 321,
                     452, 469, 483, 541, 574, 753, 777, 788, 826, 927, 946]
@@ -110,7 +110,7 @@ if __name__=="__main__":
     test_loader = get_cluster_random_loader(
         root=os.path.join(config["paths"]["dataset"], config["paths"]["test"]), batch_size=config["dataloader"]["batch_size"], num_classes=5, num_samples=500, num_images=5, mini=True, num_workers=config["dataloader"]["num_workers"], ratio=config["dataloader"]["test_ratio"])
     test_loader.dataset.build_image_index()
-    if not args.new and start_epoch > 0 and start_epoch % 30 != 0:
+    if not args.new and start_epoch > 0 and start_epoch % resample_rate != 0:
         training_loader.dataset.build_image_index()
     print("DataLoader created")
     if config.get("pretrained") and start_epoch >= 100:
@@ -138,7 +138,7 @@ if __name__=="__main__":
         total_correct = 0
         total_samples = 0
         total_loss = 0
-        if epoch % 30 == 0:
+        if epoch % resample_rate == 0:
             training_loader.dataset.build_image_index()
         
         if epoch == 100 and config.get("pretrained"):
