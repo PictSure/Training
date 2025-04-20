@@ -166,7 +166,8 @@ class VizNetWrapper(nn.Module):
     def __init__(self, path, device, num_classes=1000):
         super().__init__()
         self.embedding = VisionTransformer(num_classes=num_classes)
-        self.embedding.load_state_dict(torch.load(path, map_location=device))
+        if path:
+            self.embedding.load_state_dict(torch.load(path, map_location=device))
         self.latent_dim = self.embedding.embed_dim
 
     def forward(self, x):
