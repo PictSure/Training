@@ -35,16 +35,17 @@ if __name__=="__main__":
     print(f"Using {device} device")
     # set up encoderv
     if config.get("resnet"):
+        pretrained = True if config.get("pretrained") else None
         classifier = (
-            models.resnet18(pretrained=True if config.get("pretrained", None) else None)
+            models.resnet18(pretrained=pretrained)
             if config["resnet"] == 18
-            else models.resnet34(pretrained=True if config.get("pretrained", None) else None)
+            else models.resnet34(pretrained=pretrained)
             if config["resnet"] == 34
-            else models.resnet50(pretrained=True if config.get("pretrained", None) else None)
+            else models.resnet50(pretrained=pretrained)
         )
         encoder = ResNetWrapper(classifier)
     else: 
-        encoder = VizNetWrapper(path=config["paths"]["visnet_weights"], device=device).to(device)
+        encoder = VizNetWrapper(path=config["paths"].get("visnet_weights"), device=device).to(device)
 
     model = CustomTransformerModel(encoder, config["dataloader"]
                                    ["num_classes"], nheads=config["model"]["nheads"], nlayer=config["model"]["nlayers"], device=device)
