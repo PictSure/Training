@@ -1,6 +1,6 @@
 training_loc: cluster
 
-name: s_visnet_pretrained
+name: VisTripPre
 
 
 visnet:
@@ -13,7 +13,7 @@ paths:
   dataset: /netscratch/schiesser/inet/
   train: imagenet21k-train.msgpack
   test: imagenet21k-test.msgpack
-  visnet_weights: /netscratch/schiesser/embed_then_cat/vit_triplet_imagenet.pth
+  visnet_weights: /netscratch/schiesser/embed_then_cat/vit_triplet_imagenet_new.pth
 
 model:
   nheads: 8
@@ -36,3 +36,5 @@ dataloader:
   train_ratio: 0.01
   test_ratio: 1
   num_workers: 8
+
+resample: 10

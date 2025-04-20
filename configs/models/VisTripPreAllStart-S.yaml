@@ -1,11 +1,11 @@
 training_loc: cluster
 
-name: VisTripPreStart
+name: VisTripPreAllStart
 
 
 visnet:
 pretrained: 
-  all: false
+  all: true
   from_start: true
 
 paths:

@@ -1,6 +1,6 @@
 training_loc: cluster
 
-name: s_resnet_pretrained_all
+name: ResPreAll
 
 resnet: 18
 pretrained: 
@@ -35,3 +35,5 @@ dataloader:
   train_ratio: 0.01
   test_ratio: 1
   num_workers: 16
+
+resample: 10

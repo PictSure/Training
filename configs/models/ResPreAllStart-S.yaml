@@ -1,19 +1,18 @@
 training_loc: cluster
 
-name: VisTripPreStart
+name: ResPreAllStart
 
-
-visnet:
+resnet: 18
 pretrained: 
-  all: false
+  all: all
   from_start: true
 
 paths:
   output: /netscratch/schiesser/embed_then_cat/runs/
-  dataset: /netscratch/schiesser/inet/
+  dataset: /netscratch/schiesser/inet2/
   train: imagenet21k-train.msgpack
   test: imagenet21k-test.msgpack
-  visnet_weights: /netscratch/schiesser/embed_then_cat/vit_triplet_imagenet_new.pth
+  visnet_weights: /netscratch/schiesser/embed_then_cat/vit_triplet_imagenet.pth
 
 model:
   nheads: 8
@@ -30,11 +29,11 @@ optimizer:
 
 dataloader:
   num_samples: 10000
-  batch_size: 10
+  batch_size: 16
   num_classes: 10
   num_images: 5
   train_ratio: 0.01
   test_ratio: 1
-  num_workers: 8
+  num_workers: 16
 
 resample: 10

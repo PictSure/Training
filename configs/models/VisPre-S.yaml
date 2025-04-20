@@ -1,6 +1,6 @@
 training_loc: cluster
 
-name: s_visnet_notriplet_pretrained
+name: VisPre
 
 
 visnet:

@@ -1,19 +1,16 @@
 training_loc: cluster
 
-name: VisTripPreStart
+name: VisAllStart
 
 
 visnet:
-pretrained: 
-  all: false
-  from_start: true
 
 paths:
   output: /netscratch/schiesser/embed_then_cat/runs/
   dataset: /netscratch/schiesser/inet/
   train: imagenet21k-train.msgpack
   test: imagenet21k-test.msgpack
-  visnet_weights: /netscratch/schiesser/embed_then_cat/vit_triplet_imagenet_new.pth
+  visnet_weights: 
 
 model:
   nheads: 8
