@@ -1,5 +1,5 @@
 import torch
-from utils.data_loader_imagenet import normalize_samples, get_cluster_random_loader
+from utils.data_loader_imagenet import normalize_samples, get_cluster_random_loader, get_imagenet_random_loader
 from utils.util import count_parameters
 from model.model_PictSure import CustomTransformerModel, EmbeddingWrapper, ResNetWrapper
 from model.pretrained_viznet import VizNetWrapper
@@ -106,13 +106,18 @@ if __name__=="__main__":
     test_classes = [87, 155, 178, 181, 199, 217, 284, 321,
                     452, 469, 483, 541, 574, 753, 777, 788, 826, 927, 946]
     print("Creating dataloader")
-    training_loader = get_cluster_random_loader(
-        root=os.path.join(config["paths"]["dataset"], config["paths"]["train"]), batch_size=config["dataloader"]["batch_size"], num_classes=config["dataloader"]["num_classes"], num_samples=config["dataloader"]["num_samples"], num_images=config["dataloader"]["num_images"], mini=False, num_workers=config["dataloader"]["num_workers"], ratio=config["dataloader"]["train_ratio"])
-    test_loader = get_cluster_random_loader(
-        root=os.path.join(config["paths"]["dataset"], config["paths"]["test"]), batch_size=config["dataloader"]["batch_size"], num_classes=5, num_samples=500, num_images=5, mini=True, num_workers=config["dataloader"]["num_workers"], ratio=config["dataloader"]["test_ratio"])
-    test_loader.dataset.build_image_index()
-    if not args.new and start_epoch > 0 and start_epoch % resample_rate != 0:
-        training_loader.dataset.build_image_index()
+    if config["training_loc"] == "cluster":
+        training_loader = get_cluster_random_loader(
+            root=os.path.join(config["paths"]["dataset"], config["paths"]["train"]), batch_size=config["dataloader"]["batch_size"], num_classes=config["dataloader"]["num_classes"], num_samples=config["dataloader"]["num_samples"], num_images=config["dataloader"]["num_images"], mini=False, num_workers=config["dataloader"]["num_workers"], ratio=config["dataloader"]["train_ratio"])
+        test_loader = get_cluster_random_loader(
+            root=os.path.join(config["paths"]["dataset"], config["paths"]["test"]), batch_size=config["dataloader"]["batch_size"], num_classes=5, num_samples=500, num_images=5, mini=True, num_workers=config["dataloader"]["num_workers"], ratio=config["dataloader"]["test_ratio"])
+        test_loader.dataset.build_image_index()
+        if not args.new and start_epoch > 0 and start_epoch % resample_rate != 0:
+            training_loader.dataset.build_image_index()
+    else:
+        training_loader = get_imagenet_random_loader(root=config["paths"]["dataset"], batch_size=config["dataloader"]["batch_size"], num_classes=config["dataloader"]["num_classes"], num_samples=10000, num_images=config["dataloader"]["num_images"], train=True, exclude_images=test_classes, mini=False, num_workers=config["dataloader"]["worker"])
+        test_loader = get_imagenet_random_loader(root=config["paths"]["dataset"], batch_size=config["dataloader"]["batch_size"], num_classes=config["dataloader"]["num_classes"], num_samples=10000, num_images=config["dataloader"]["num_images"], train=True, include_images=test_classes, mini=True, num_workers=config["dataloader"]["worker"])
+
     print("DataLoader created")
     if config.get("pretrained") and start_epoch >= 100:
             for param in encoder.parameters():
@@ -139,7 +144,7 @@ if __name__=="__main__":
         total_correct = 0
         total_samples = 0
         total_loss = 0
-        if epoch % resample_rate == 0:
+        if epoch % resample_rate == 0 and config["training_loc"] == "cluster":
             training_loader.dataset.build_image_index()
         
         if epoch == 100 and config.get("pretrained"):
