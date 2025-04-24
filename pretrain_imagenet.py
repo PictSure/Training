@@ -4,16 +4,12 @@ import torch.nn.functional as F
 from torch.utils.data import DataLoader, Dataset
 import torchvision
 import torchvision.transforms as T
-
-import math
 import random
 import argparse
-
-import math
-import random
-import torch
 from torch.utils.data import Sampler
 from model.model_ViT import VisionTransformer
+from tqdm import tqdm
+
 
 class ClassStratifiedSampler(Sampler):
     """
@@ -217,7 +213,7 @@ def train_vit_triplet_stratified(
 
     optimizer = torch.optim.Adam(model.parameters(), lr=lr)
 
-    for epoch in range(epochs):
+    for epoch in tqdm(range(epochs)):
         model.train()
         total_loss, total_correct, total_count = 0, 0, 0
 
@@ -272,4 +268,4 @@ if __name__=="__main__":
 
     data_path = args.data_path
     device = args.device
-    train_vit_triplet_stratified()
+    train_vit_triplet_stratified(data_path=data_path, device=device)
