@@ -2,7 +2,7 @@ import torch
 from utils.data_loader_imagenet import normalize_samples, get_cluster_random_loader, get_imagenet_random_loader
 from utils.util import count_parameters
 from model.model_PictSure import CustomTransformerModel, EmbeddingWrapper, ResNetWrapper
-from model.pretrained_viznet import VizNetWrapper
+from model.model_ViT import VitNetWrapper
 from utils.summary_writer import SummaryWriter, find_latest_run_directory
 from utils.lr_scheduler import CustomLRScheduler
 from torch.nn.utils import clip_grad_norm_
@@ -46,7 +46,7 @@ if __name__=="__main__":
         encoder = ResNetWrapper(classifier)
     else: 
         vit_path = config["paths"].get("visnet_weights") if config.get("pretrained", False) else None
-        encoder = VizNetWrapper(path=vit_path, device=device).to(device)
+        encoder = VitNetWrapper(path=vit_path, device=device).to(device)
 
     model = CustomTransformerModel(encoder, config["dataloader"]
                                    ["num_classes"], nheads=config["model"]["nheads"], nlayer=config["model"]["nlayers"], device=device)
