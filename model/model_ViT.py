@@ -162,7 +162,7 @@ class VisionTransformer(nn.Module):
         return logits, cls_token_final
     
 
-class VizNetWrapper(nn.Module):
+class VitNetWrapper(nn.Module):
     def __init__(self, path, device, num_classes=1000):
         super().__init__()
         self.embedding = VisionTransformer(num_classes=num_classes)
