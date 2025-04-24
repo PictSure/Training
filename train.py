@@ -1,7 +1,7 @@
 import torch
 from utils.data_loader_imagenet import normalize_samples, get_cluster_random_loader, get_imagenet_random_loader
 from utils.util import count_parameters
-from model.model_PictSure import CustomTransformerModel, EmbeddingWrapper, ResNetWrapper
+from model.model_PictSure import CustomTransformerModel, ResNetWrapper
 from model.model_ViT import VitNetWrapper
 from utils.summary_writer import SummaryWriter, find_latest_run_directory
 from utils.lr_scheduler import CustomLRScheduler
@@ -115,8 +115,8 @@ if __name__=="__main__":
         if not args.new and start_epoch > 0 and start_epoch % resample_rate != 0:
             training_loader.dataset.build_image_index()
     else:
-        training_loader = get_imagenet_random_loader(root=config["paths"]["dataset"], batch_size=config["dataloader"]["batch_size"], num_classes=config["dataloader"]["num_classes"], num_samples=10000, num_images=config["dataloader"]["num_images"], train=True, exclude_images=test_classes, mini=False, num_workers=config["dataloader"]["worker"])
-        test_loader = get_imagenet_random_loader(root=config["paths"]["dataset"], batch_size=config["dataloader"]["batch_size"], num_classes=config["dataloader"]["num_classes"], num_samples=10000, num_images=config["dataloader"]["num_images"], train=True, include_images=test_classes, mini=True, num_workers=config["dataloader"]["worker"])
+        training_loader = get_imagenet_random_loader(root=config["paths"]["dataset"], batch_size=config["dataloader"]["batch_size"], num_classes=config["dataloader"]["num_classes"], num_samples=10000, num_images=config["dataloader"]["num_images"], train=True, exclude_images=test_classes, mini=False, num_workers=config["dataloader"]["num_workers"])
+        test_loader = get_imagenet_random_loader(root=config["paths"]["dataset"], batch_size=config["dataloader"]["batch_size"], num_classes=config["dataloader"]["num_classes"], num_samples=10000, num_images=config["dataloader"]["num_images"], train=True, include_images=test_classes, mini=True, num_workers=config["dataloader"]["num_workers"])
 
     print("DataLoader created")
     if config.get("pretrained") and start_epoch >= 100:
