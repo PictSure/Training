@@ -45,7 +45,8 @@ if __name__=="__main__":
         )
         encoder = ResNetWrapper(classifier)
     else: 
-        encoder = VizNetWrapper(path=config["paths"].get("visnet_weights"), device=device).to(device)
+        vit_path = config["paths"].get("visnet_weights") if config.get("pretrained", False) else None
+        encoder = VizNetWrapper(path=vit_path, device=device).to(device)
 
     model = CustomTransformerModel(encoder, config["dataloader"]
                                    ["num_classes"], nheads=config["model"]["nheads"], nlayer=config["model"]["nlayers"], device=device)
@@ -57,24 +58,21 @@ if __name__=="__main__":
         f"Total parameters: {total_params:,}, Trainable parameters: {trainable_params:,}, Share of trainable: {trainable_params / total_params:.2%}")
     loss_fn = torch.nn.CrossEntropyLoss(
         label_smoothing=config["optimizer"]["epsilon"])
-    target_lr = float(config["optimizer"]["lr_target"])
-    initial_lr = float(config["optimizer"]["lr_initial"])
-    optimizer = torch.optim.AdamW(model.parameters(
-    ), lr=initial_lr, weight_decay=float(config["optimizer"]["weight_decay"]))
+    lr_encoder = float(config["optimizer"]["lr_encoder"])
+    lr_rest = float(config["optimizer"]["lr_rest"])
     start_epoch = 0
-    # if ViT encoder separate encoder block from rest of model to allow for different learning rates
-    if config.get("pretrained"):
-        encoder_params = list(encoder.parameters())
-        encoder_param_ids = {id(param) for param in encoder_params}
-        other_params = [param for param in model.parameters() if id(param) not in encoder_param_ids]
 
-        for param in encoder.parameters():
-            param.requires_grad = config["pretrained"]["from_start"]
+    encoder_params = list(encoder.parameters())
+    encoder_param_ids = {id(param) for param in encoder_params}
+    other_params = [param for param in model.parameters() if id(param) not in encoder_param_ids]
 
-        optimizer = torch.optim.AdamW([
-            {'params': encoder_params, 'lr': target_lr},  # Apply a smaller learning rate to the encoder
-            {'params': other_params, 'lr': initial_lr}          # Apply the default learning rate to the rest of the model
-        ], weight_decay=float(config["optimizer"]["weight_decay"]))
+    for param in encoder.parameters():
+        param.requires_grad = config["optimizer"]["from_start"]
+
+    optimizer = torch.optim.AdamW([
+        {'params': encoder_params, 'lr': lr_encoder},  # Apply a smaller learning rate to the encoder
+        {'params': other_params, 'lr': lr_rest}          # Apply the default learning rate to the rest of the model
+    ], weight_decay=float(config["optimizer"]["weight_decay"]))
     best_loss = float("inf")
     best_acc = 0
     if args.new:
@@ -119,18 +117,19 @@ if __name__=="__main__":
         test_loader = get_imagenet_random_loader(root=config["paths"]["dataset"], batch_size=config["dataloader"]["batch_size"], num_classes=config["dataloader"]["num_classes"], num_samples=10000, num_images=config["dataloader"]["num_images"], train=True, include_images=test_classes, mini=True, num_workers=config["dataloader"]["worker"])
 
     print("DataLoader created")
-    if config.get("pretrained") and start_epoch >= 100:
+    if start_epoch >= 100:
             for param in encoder.parameters():
                     param.requires_grad = True
 
     EPOCHS = config["optimizer"]["epochs"]
-    scheduler = CustomLRScheduler(
-        optimizer=optimizer,
-        epochs=EPOCHS,
-        # when ViT encoder: applys learning rate schedule only to non encoder part and leaves encoder's lr constant
-        param_group_index=None if config.get("pretrained", {}).get("all") else 1,
-        last_epoch=start_epoch-1
-    )
+    if config["optimizer"]["lr_schedule"]:
+        scheduler = CustomLRScheduler(
+            optimizer=optimizer,
+            epochs=EPOCHS,
+            # if all variable is False: applies learning rate schedule only to non encoder part and leaves encoder's lr constant
+            param_group_index=None if config["optimizer"].get("all") else 1,
+            last_epoch=start_epoch-1
+        )
 
     losses = []
     accuracies = []
@@ -147,7 +146,7 @@ if __name__=="__main__":
         if epoch % resample_rate == 0 and config["training_loc"] == "cluster":
             training_loader.dataset.build_image_index()
         
-        if epoch == 100 and config.get("pretrained"):
+        if epoch == 100:
                 for param in encoder.parameters():
                         param.requires_grad = True
 
@@ -235,7 +234,8 @@ if __name__=="__main__":
                 epoch+1, EPOCHS, avg_loss, accuracy, test_acc, avg_grad_norm
             )
         )
-        scheduler.step()
+        if config["optimizer"]["lr_schedule"]:
+            scheduler.step()
 
         writer.log_epoch_metrics("train", epoch, {
             "loss": avg_loss, "acc": accuracy, "test_acc": test_acc, "avg_grad_norm": avg_grad_norm, "lrs": [param_group["lr"] if any(p.requires_grad for p in param_group["params"]) else None for param_group in optimizer.param_groups]
