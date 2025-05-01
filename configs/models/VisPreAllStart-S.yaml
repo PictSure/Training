@@ -1,32 +1,34 @@
 training_loc: cluster
 
-name: VisTripPre
-
+name: VisPreAllStart
 
 visnet: true
-pretrained: 
-  all: false
-  from_start: false
+pretrained: true
 
 paths:
   output: /netscratch/schiesser/embed_then_cat/runs/
   dataset: /netscratch/schiesser/inet/
   train: imagenet21k-train.msgpack
   test: imagenet21k-test.msgpack
-  visnet_weights: /netscratch/schiesser/embed_then_cat/vit_triplet_imagenet_new.pth
+  visnet_weights: /netscratch/schiesser/embed_then_cat/pretrained_viznet_no_triplet.pt
 
 model:
   nheads: 8
   nlayers: 4
 
 optimizer:
-  lr_initial: 5e-4
-  lr_target: 5e-5
   epochs: 600
   weight_decay: 1e-5
   log_step: 10
   epsilon: 0.1
   acc_steps: 1
+  all: true
+  from_start: true
+  lr_encoder: 5e-5
+  lr_rest: 5e-5
+  lr_schedule: false
+  lr_initial: # lr_max
+  lr_target: # lr_min
 
 dataloader:
   num_samples: 10000

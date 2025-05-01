@@ -33,9 +33,9 @@ if __name__=="__main__":
         else "cpu"
     )
     print(f"Using {device} device")
-    # set up encoderv
+    # set up encoder either resnet or ViT
     if config.get("resnet"):
-        pretrained = True if config.get("pretrained") else None
+        pretrained = config.get("pretrained", False)
         classifier = (
             models.resnet18(pretrained=pretrained)
             if config["resnet"] == 18
