@@ -246,6 +246,7 @@ def get_imagenet_random_loader(
 
 def get_cluster_random_loader(
     root="./data",
+    class_index_path=None,
     num_images=10,
     num_samples=10000,
     num_classes=2,
@@ -257,7 +258,6 @@ def get_cluster_random_loader(
     vc=False,
     semantic=False,
     hierarchy_path=None,
-    class_index_path=None
 ):
     """
     Returns a DataLoader for the ImageNetRandomDataset.
@@ -296,6 +296,7 @@ def get_cluster_random_loader(
     else: 
         dataset = ImageNetDataDingsSet(
             data_path=root,
+            class_index_path=class_index_path,
             num_images=num_images,
             num_samples=num_samples,
             num_classes=num_classes,

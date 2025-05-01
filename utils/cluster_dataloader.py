@@ -9,11 +9,13 @@ import torch
 from tqdm import trange
 import gc
 import json
+import pickle
 
 class ImageNetDataDingsSet(Dataset):
     def __init__(
         self,
         data_path="./data",
+        class_index_path=None,
         num_images=10,
         num_samples=10000,
         num_classes=2,
@@ -29,7 +31,7 @@ class ImageNetDataDingsSet(Dataset):
         self.dataset = MsgpackReader(self.data_path)
         self.data = None
         self.classes = []
-        self.class_index = self._build_class_index()
+        self.class_index = self._build_class_index(class_index_path)
         self.fixed_classes = random_classes
         self.num_total_classes = len(self.class_index.keys())
         self.ratio = ratio
@@ -68,7 +70,11 @@ class ImageNetDataDingsSet(Dataset):
         elif self.device == "mps":
             torch.mps.empty_cache()
         
-    def _build_class_index(self):
+    def _build_class_index(self, class_index_path):
+        if class_index_path:
+            with open(class_index_path, "rb") as f:
+                data_dict = pickle.load(f)
+            return data_dict
         data_dict = defaultdict(list)
         progressbar = trange(len(self.dataset))
         for i in range(len(self.dataset)):
