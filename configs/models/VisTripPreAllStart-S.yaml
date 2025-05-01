@@ -3,7 +3,7 @@ training_loc: cluster
 name: VisTripPreAllStart
 
 
-visnet:
+visnet: true
 pretrained: 
   all: true
   from_start: true
