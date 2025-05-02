@@ -13,6 +13,7 @@ paths:
   train:
   test:
   visnet_weights:
+  class_index:
 
 model:
   nheads:
