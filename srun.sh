@@ -50,3 +50,11 @@ srun \
 --task-prolog="`pwd`/install.sh" \
 --gpus=1 --cpus-per-gpu=16 --partition=H100-SEE --mem=220000 --job-name=visnets \
 python3 train.py --config ./configs/models/PictSureSVisPre.yaml -n
+
+srun \
+--container-mounts=/netscratch/$USER:/netscratch/$USER,"`pwd`":"`pwd`",/ds:/ds \
+--container-workdir="`pwd`" \
+--container-image=/enroot/nvcr.io_nvidia_pytorch_23.06-py3.sqsh \
+--task-prolog="`pwd`/install.sh" \
+--gpus=1 --cpus-per-gpu=10 --partition=H100-SEE --mem=220000 --job-name=visallstart \
+python3 train.py --config ./configs/models/VisAllStart-S.yaml -n
