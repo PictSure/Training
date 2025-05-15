@@ -27,6 +27,7 @@ optimizer:
   acc_steps:
   all:
   from_start:
+  train_embed:
   lr_encoder:
   lr_rest:
   lr_schedule:
