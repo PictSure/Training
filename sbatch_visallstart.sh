@@ -33,8 +33,7 @@ srun \
 --container-mounts=/netscratch/$USER:/netscratch/$USER,"$(pwd)":"$(pwd)",/ds:/ds \
 --container-workdir="$(pwd)" \
 --container-image=/enroot/nvcr.io_nvidia_pytorch_23.06-py3.sqsh \
---task-prolog="$(pwd)/install.sh" \
-$CMD
+install.sh $CMD
 
 echo "Job finished at $(date)"
 
