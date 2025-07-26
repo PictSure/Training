@@ -1,25 +1,8 @@
-import torch
-import torch.nn as nn
-import torch.nn.functional as F
 from torchvision import datasets, transforms
-
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-    
-class ResNetWrapper(nn.Module):
-    def __init__(self, classifier):
-        super(ResNetWrapper, self).__init__()
-        self.feature_extractor = nn.Sequential(*list(classifier.children())[:-1], torch.nn.Flatten())
-        self.latent_dim = self.feature_extractor(torch.zeros(1, 3, 224, 224)).shape[-1]
 
-    def forward(self, x):
-        num_images = x.size(1)
-        batch_size = x.size(0)
-        x = x.view(-1, 3, 224, 224)
-        x = self.feature_extractor(x)
-        x = x.view(batch_size, num_images, self.latent_dim)
-        return x
 
 class CustomTransformerModel(nn.Module):
     def __init__(self, embedding_layer, num_classes, nheads=8, nlayer=4, device="cpu"):

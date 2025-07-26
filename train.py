@@ -1,7 +1,8 @@
 import torch
 from utils.data_loader_imagenet import normalize_samples, get_cluster_random_loader, get_imagenet_random_loader
 from utils.util import count_parameters
-from model.model_PictSure import CustomTransformerModel, ResNetWrapper
+from model.model_PictSure import CustomTransformerModel
+from model.wrapper import ResNetWrapper, DINOV2Wrapper
 from model.model_ViT import VitNetWrapper
 from utils.summary_writer import SummaryWriter, find_latest_run_directory
 from utils.lr_scheduler import CustomLRScheduler
@@ -44,6 +45,10 @@ if __name__=="__main__":
             else models.resnet50(pretrained=pretrained)
         )
         encoder = ResNetWrapper(classifier)
+        encoder_name = "resnet"
+    elif config.get("dinov2"):
+        encoder = DINOV2Wrapper(config.get("dinov2"), device=device).to(device)
+        encoder_name = "dinov2"
     else: 
         vit_path = config["paths"].get("visnet_weights") if config.get("pretrained", False) else None
         encoder = VitNetWrapper(path=vit_path, device=device).to(device)
@@ -157,7 +162,7 @@ if __name__=="__main__":
             images, labels, pred_image, pred_label = images.to(device, non_blocking=True), labels.to(
                 device, non_blocking=True), pred_image.to(device, non_blocking=True), pred_label.to(device, non_blocking=True)
             images, pred_image = normalize_samples(
-                images, pred_image, resize=(224, 224))
+                images, pred_image, resize=(224, 224), model=encoder_name)
             
             outputs = model.forward(images, labels, pred_image)
 

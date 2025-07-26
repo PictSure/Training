@@ -130,9 +130,24 @@ class ImageNetRandomDataset(Dataset):
         sampled_labels_torch = torch.tensor(sampled_labels, dtype=torch.long)  # Shape: (num_classes * num_images,)
 
         return sampled_images_torch, sampled_labels_torch, pred_image_torch, torch.tensor(pred_label, dtype=torch.long)
+    
+def apply_noise(sampled_images, pred_image):
+    kernel_size = 5
+    sigma = random.uniform(0.1, 2.0)
+    sampled_images = TF.gaussian_blur(sampled_images, kernel_size=kernel_size, sigma=sigma)
+    pred_image = TF.gaussian_blur(pred_image.unsqueeze(0), kernel_size=kernel_size,
+                                    sigma=sigma).squeeze(0)
+    
+    return sampled_images, pred_image
 
+def apply_sharpness(sampled_images, pred_image):
+    sharpness_factor = random.uniform(0.5, 1.5)
+    sampled_images = TF.adjust_sharpness(sampled_images, sharpness_factor=sharpness_factor)
+    pred_image = TF.adjust_sharpness(pred_image.unsqueeze(0), sharpness_factor=sharpness_factor).squeeze(0)
 
-def normalize_samples(sampled_images, pred_image, gaussian=False, sharpness=False, resize=None):
+    return sampled_images, pred_image
+    
+def resnet_normalize(sampled_images, pred_image, gaussian=False, sharpness=False, resize=None):
     """
     Normalize the input and prediction images to the range [0, 1].
     
@@ -144,10 +159,11 @@ def normalize_samples(sampled_images, pred_image, gaussian=False, sharpness=Fals
         normalized_sampled_images (torch.Tensor): Normalized sampled images.
         normalized_pred_image (torch.Tensor): Normalized prediction image.
     """
+
     # Define mean and std for normalization
-    mean = torch.tensor([0.4914, 0.4822, 0.4465],
+    mean = torch.tensor([0.485, 0.456, 0.406],
                         device=sampled_images.device).view(1, -1, 1, 1)
-    std = torch.tensor([0.2023, 0.1994, 0.2010],
+    std = torch.tensor([0.229, 0.224, 0.225],
                        device=sampled_images.device).view(1, -1, 1, 1)
 
     # Get shapes
@@ -156,27 +172,96 @@ def normalize_samples(sampled_images, pred_image, gaussian=False, sharpness=Fals
     # Reshape sampled_images to (N*B, C, H, W)
     sampled_images = sampled_images.view(N * B, C, H, W)
 
-    # Normalize between [0, 1]
-    # sampled_images = torch.clamp(sampled_images, 0, 255) / 255.0
-
     if gaussian:
         # Implement the equivalent to transforms.GaussianBlur(5, sigma=(0.1, 2.0)),
-        kernel_size = 5
-        sigma = random.uniform(0.1, 2.0)
-        sampled_images = TF.gaussian_blur(sampled_images, kernel_size=kernel_size, sigma=sigma)
-        pred_image = TF.gaussian_blur(pred_image, kernel_size=kernel_size, sigma=sigma)
+        sampled_images, pred_image = apply_noise(sampled_images, pred_image)
 
     if sharpness:
-        # Implement the equivalent to transforms.RandomAdjustSharpness(0.5, 0.5)
-        sharpness_factor = random.uniform(0.5, 1.5)
-        sampled_images = TF.adjust_sharpness(sampled_images, sharpness_factor=sharpness_factor)
-        pred_image = TF.adjust_sharpness(pred_image, sharpness_factor=sharpness_factor)
+        # Implement the equivalent to transforms.RandomAdjustSharpness(0.5)
+        sampled_images, pred_image = apply_sharpness(sampled_images, pred_image)
 
     # Normalize sampled_images using mean and std
     sampled_images = (sampled_images - mean) / std
 
-    # Normalize pred_image, which has shape (N, C, H, W)
-    pred_image = (pred_image - mean) / std
+    # Normalize pred_image
+    pred_image = (pred_image - mean.squeeze(0)) / std.squeeze(0)
+
+    return sampled_images, pred_image
+
+def normalize_dinov2(sampled_images, pred_image, gaussian=False, sharpness=False, resize=None):
+    """
+    Normalize the input and prediction images for DINOv2 preprocessing.
+
+    Args:
+        sampled_images (torch.Tensor): Batch of sampled images with shape (N, B, C, H, W).
+        pred_image (torch.Tensor): Single prediction image with shape (B, C, H, W).
+
+    Returns:
+        normalized_sampled_images (torch.Tensor): Normalized sampled images.
+        normalized_pred_image (torch.Tensor): Normalized prediction image.
+    """
+    # DINOv2 parameters
+    mean = torch.tensor([0.485, 0.456, 0.406], device=sampled_images.device).view(1, -1, 1, 1)
+    std = torch.tensor([0.229, 0.224, 0.225], device=sampled_images.device).view(1, -1, 1, 1)
+    rescale_factor = 1.0 / 255.0
+    crop_size = (224, 224)
+    resize_shortest = 256
+
+    N, B, C, H, W = sampled_images.size()
+    sampled_images = sampled_images.view(N * B, C, H, W)
+
+    # Optionally apply gaussian blur and sharpness
+    if gaussian:
+        sampled_images, pred_image = apply_noise(sampled_images, pred_image)
+    if sharpness:
+        sampled_images, pred_image = apply_sharpness(sampled_images, pred_image)
+
+    # Rescale to [0, 1]
+    sampled_images = sampled_images * rescale_factor
+    pred_image = pred_image * rescale_factor
+
+    # Resize so shortest edge = 256, then center crop to 224x224
+    def resize_and_crop(imgs):
+        # imgs: (N, C, H, W)
+        _, _, h, w = imgs.shape
+        scale = resize_shortest / min(h, w)
+        new_h, new_w = int(round(h * scale)), int(round(w * scale))
+        imgs = F.interpolate(imgs, size=(new_h, new_w), mode="bilinear", align_corners=False)
+        # Center crop
+        top = (new_h - crop_size[0]) // 2
+        left = (new_w - crop_size[1]) // 2
+        imgs = imgs[:, :, top:top+crop_size[0], left:left+crop_size[1]]
+        return imgs
+
+    sampled_images = resize_and_crop(sampled_images)
+    pred_image = resize_and_crop(pred_image.unsqueeze(0)).squeeze(0)
+
+    # Normalize
+    sampled_images = (sampled_images - mean) / std
+    pred_image = (pred_image - mean.squeeze(0)) / std.squeeze(0)
+
+    return sampled_images, pred_image
+
+
+def normalize_samples(sampled_images, pred_image, gaussian=False, sharpness=False, resize=None, model="resnet"):
+    """
+    Normalize the input and prediction images to the range [0, 1].
+    
+    Args:
+        sampled_images (torch.Tensor): Batch of sampled images with shape (N, B, C, H, W).
+        pred_image (torch.Tensor): Single prediction image with shape (B, C, H, W).
+        
+    Returns:
+        normalized_sampled_images (torch.Tensor): Normalized sampled images.
+        normalized_pred_image (torch.Tensor): Normalized prediction image.
+    """
+
+    N, B, C, H, W = sampled_images.size()  # sampled_images shape: (N, B, C, H, W)
+
+    if model == "resnet":
+        sampled_images, pred_image = resnet_normalize(sampled_images, pred_image, gaussian, sharpness, resize)
+    elif model == "dinov2":
+        sampled_images, pred_image = normalize_dinov2(sampled_images, pred_image, gaussian, sharpness, resize)
 
     # Resize if necessary
     if resize is not None:
