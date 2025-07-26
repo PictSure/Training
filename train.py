@@ -2,7 +2,7 @@ import torch
 from utils.data_loader_imagenet import normalize_samples, get_cluster_random_loader, get_imagenet_random_loader
 from utils.util import count_parameters
 from model.model_PictSure import CustomTransformerModel
-from model.wrapper import ResNetWrapper, DINOV2Wrapper
+from model.wrapper import ResNetWrapper, DINOV2Wrapper, CLIPWrapper
 from model.model_ViT import VitNetWrapper
 from utils.summary_writer import SummaryWriter, find_latest_run_directory
 from utils.lr_scheduler import CustomLRScheduler
@@ -49,6 +49,9 @@ if __name__=="__main__":
     elif config.get("dinov2"):
         encoder = DINOV2Wrapper(config.get("dinov2"), device=device).to(device)
         encoder_name = "dinov2"
+    elif config.get("clip"):
+        encoder = CLIPWrapper(device=device).to(device)
+        encoder_name = "clip"
     else: 
         vit_path = config["paths"].get("visnet_weights") if config.get("pretrained", False) else None
         encoder = VitNetWrapper(path=vit_path, device=device).to(device)

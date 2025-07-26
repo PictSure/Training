@@ -1,5 +1,6 @@
 import torch
 from transformers import AutoImageProcessor, AutoModel
+from transformers import CLIPModel, CLIPProcessor
 import torch.nn as nn
 import torch.nn.functional as F
 import torchvision.transforms as transforms
@@ -42,3 +43,29 @@ class DINOV2Wrapper(nn.Module):
         cls_embeddings = outputs.last_hidden_state[:, 0, :]
         cls_embeddings = cls_embeddings.view(batch_size, num_images, self.latent_dim)
         return cls_embeddings
+
+class CLIPWrapper(nn.Module):
+    def __init__(self, device="cpu"):
+        super(CLIPWrapper, self).__init__()
+        self.model = CLIPModel.from_pretrained('openai/clip-vit-large-patch14').to(device)
+        self.device = device
+        # Get latent dim by running a dummy input through the model
+        dummy = torch.zeros(1, 3, 224, 224).to(device)
+        with torch.no_grad():
+            vision_outputs = self.model.vision_model(pixel_values=dummy)
+            image_embeds = vision_outputs[1]
+            image_embeds = self.model.visual_projection(image_embeds)
+            image_embeds = image_embeds / image_embeds.norm(dim=-1, keepdim=True)
+        self.latent_dim = image_embeds.shape[-1]
+
+    def forward(self, x):
+        num_images = x.size(1)
+        batch_size = x.size(0)
+        x = x.view(-1, 3, 224, 224).to(self.device)
+        with torch.no_grad():
+            vision_outputs = self.model.vision_model(pixel_values=x)
+            image_embeds = vision_outputs[1]
+            image_embeds = self.model.visual_projection(image_embeds)
+            image_embeds = image_embeds / image_embeds.norm(dim=-1, keepdim=True)
+        image_embeds = image_embeds.view(batch_size, num_images, self.latent_dim)
+        return image_embeds

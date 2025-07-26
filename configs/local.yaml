@@ -24,6 +24,8 @@ optimizer:
   log_step: 10
   epsilon: 0.1
   acc_steps: 8
+  lr_encoder: 0.0
+  lr_rest: 5e-4
 
 dataloader:
   num_samples: 10000

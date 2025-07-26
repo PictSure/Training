@@ -243,6 +243,41 @@ def normalize_dinov2(sampled_images, pred_image, gaussian=False, sharpness=False
     return sampled_images, pred_image
 
 
+def normalize_clip(sampled_images, pred_image, gaussian=False, sharpness=False, resize=None):
+    mean = torch.tensor([0.48145466, 0.4578275, 0.40821073], device=sampled_images.device).view(1, -1, 1, 1)
+    std = torch.tensor([0.26862954, 0.26130258, 0.27577711], device=sampled_images.device).view(1, -1, 1, 1)
+    rescale_factor = 1.0 / 255.0
+    crop_size = (224, 224)
+    resize_size = 224
+
+    N, B, C, H, W = sampled_images.size()
+    sampled_images = sampled_images.view(N * B, C, H, W)
+
+    if gaussian:
+        sampled_images, pred_image = apply_noise(sampled_images, pred_image)
+    if sharpness:
+        sampled_images, pred_image = apply_sharpness(sampled_images, pred_image)
+
+    # Rescale to [0, 1]
+    sampled_images = sampled_images * rescale_factor
+    pred_image = pred_image * rescale_factor
+
+    def resize_and_crop(imgs):
+        # imgs: (N, C, H, W)
+        imgs = F.interpolate(imgs, size=resize_size, mode="bilinear", align_corners=False)
+        # Center crop (if needed, but here resize and crop size are the same)
+        return imgs
+
+    sampled_images = resize_and_crop(sampled_images)
+    pred_image = resize_and_crop(pred_image.unsqueeze(0)).squeeze(0)
+
+    # Normalize
+    sampled_images = (sampled_images - mean) / std
+    pred_image = (pred_image - mean.squeeze(0)) / std.squeeze(0)
+
+    return sampled_images, pred_image
+
+
 def normalize_samples(sampled_images, pred_image, gaussian=False, sharpness=False, resize=None, model="resnet"):
     """
     Normalize the input and prediction images to the range [0, 1].
