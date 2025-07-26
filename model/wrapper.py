@@ -4,6 +4,7 @@ from transformers import CLIPModel, CLIPProcessor
 import torch.nn as nn
 import torch.nn.functional as F
 import torchvision.transforms as transforms
+from model.model_ViT import VisionTransformer
     
 class ResNetWrapper(nn.Module):
     def __init__(self, classifier):
@@ -69,3 +70,19 @@ class CLIPWrapper(nn.Module):
             image_embeds = image_embeds / image_embeds.norm(dim=-1, keepdim=True)
         image_embeds = image_embeds.view(batch_size, num_images, self.latent_dim)
         return image_embeds
+
+class VitNetWrapper(nn.Module):
+    def __init__(self, path, device, num_classes=1000):
+        super().__init__()
+        self.embedding = VisionTransformer(num_classes=num_classes)
+        if path:
+            self.embedding.load_state_dict(torch.load(path, map_location=device))
+        self.latent_dim = self.embedding.embed_dim
+
+    def forward(self, x):
+        num_images = x.size(1)
+        batch_size = x.size(0)
+        x = x.view(-1, 3, 224, 224)
+        x = self.embedding.forward(x)[1]
+        x = x.view(batch_size, num_images, self.latent_dim)
+        return x

@@ -2,8 +2,7 @@ import torch
 from utils.data_loader_imagenet import normalize_samples, get_cluster_random_loader, get_imagenet_random_loader
 from utils.util import count_parameters
 from model.model_PictSure import CustomTransformerModel
-from model.wrapper import ResNetWrapper, DINOV2Wrapper, CLIPWrapper
-from model.model_ViT import VitNetWrapper
+from model.wrapper import ResNetWrapper, DINOV2Wrapper, CLIPWrapper, VitNetWrapper
 from utils.summary_writer import SummaryWriter, find_latest_run_directory
 from utils.lr_scheduler import CustomLRScheduler
 from torch.nn.utils import clip_grad_norm_
