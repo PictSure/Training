@@ -106,7 +106,7 @@ class Trainer:
         if config["training_loc"] == "cluster":
             self.training_loader = get_cluster_random_loader(
                 root=os.path.join(config["paths"]["dataset"], config["paths"]["train"]),
-                class_index_path=["paths"]["class_index"],
+                class_index_path=config["paths"]["class_index"],
                 batch_size=config["dataloader"]["batch_size"],
                 num_classes=config["dataloader"]["num_classes"],
                 num_samples=config["dataloader"]["num_samples"],

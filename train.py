@@ -106,7 +106,7 @@ if __name__=="__main__":
     print("Creating dataloader")
     if config["training_loc"] == "cluster":
         training_loader = get_cluster_random_loader(
-            root=os.path.join(config["paths"]["dataset"], config["paths"]["train"]), class_index_path=["paths"]["class_index"], batch_size=config["dataloader"]["batch_size"], num_classes=config["dataloader"]["num_classes"], num_samples=config["dataloader"]["num_samples"], num_images=config["dataloader"]["num_images"], mini=False, num_workers=config["dataloader"]["num_workers"], ratio=config["dataloader"]["train_ratio"])
+            root=os.path.join(config["paths"]["dataset"], config["paths"]["train"]), class_index_path=config["paths"]["class_index"], batch_size=config["dataloader"]["batch_size"], num_classes=config["dataloader"]["num_classes"], num_samples=config["dataloader"]["num_samples"], num_images=config["dataloader"]["num_images"], mini=False, num_workers=config["dataloader"]["num_workers"], ratio=config["dataloader"]["train_ratio"])
         test_loader = get_cluster_random_loader(
             root=os.path.join(config["paths"]["dataset"], config["paths"]["test"]), batch_size=config["dataloader"]["batch_size"], num_classes=5, num_samples=500, num_images=5, mini=True, num_workers=config["dataloader"]["num_workers"], ratio=config["dataloader"]["test_ratio"])
         test_loader.dataset.build_image_index()
