@@ -1,16 +1,13 @@
 import torch
-from utils.data_loader_imagenet import normalize_samples, get_cluster_random_loader, get_imagenet_random_loader
-from utils.util import count_parameters
-from model.model_PictSure import CustomTransformerModel, ResNetWrapper
-from model.model_ViT import VitNetWrapper
+from utils.data_loader_imagenet import normalize_samples
 from utils.summary_writer import SummaryWriter, find_latest_run_directory
 from utils.lr_scheduler import CustomLRScheduler
 from torch.nn.utils import clip_grad_norm_
 import yaml
 from tqdm import trange
 import os
-from torchvision import models
-
+from utils.model_factory import ModelFactory
+from utils.dataset_factory import DatasetFactory
 class Trainer:
     def __init__(self, config, device, args):
         self.config = config
@@ -18,42 +15,15 @@ class Trainer:
         self.args = args
         self.resample_rate = config.get("resample", 30)
         self.test_classes = [87, 155, 178, 181, 199, 217, 284, 321, 452, 469, 483, 541, 574, 753, 777, 788, 826, 927, 946]
-        self._setup_model()
+        self.model = ModelFactory(config).create_model()
         self._setup_optimizer()
         self._setup_writer_and_checkpoint()
-        self._setup_dataloaders()
+        self.training_loader, self.test_loader = DatasetFactory(config, args, self.start_epoch).get_dataloaders()
         self.loss_fn = torch.nn.CrossEntropyLoss(label_smoothing=config["optimizer"]["epsilon"])
         self.losses = []
         self.accuracies = []
         self.test_accuracies = []
         self.writer.log_hyperparameters(config)
-
-    def _setup_model(self):
-        config = self.config
-        device = self.device
-        if config.get("resnet"):
-            pretrained = config.get("pretrained", False)
-            classifier = (
-                models.resnet18(pretrained=pretrained)
-                if config["resnet"] == 18
-                else models.resnet34(pretrained=pretrained)
-                if config["resnet"] == 34
-                else models.resnet50(pretrained=pretrained)
-            )
-            encoder = ResNetWrapper(classifier)
-        else:
-            vit_path = config["paths"].get("visnet_weights") if config.get("pretrained", False) else None
-            encoder = VitNetWrapper(path=vit_path, device=device).to(device)
-        self.encoder = encoder
-        self.model = CustomTransformerModel(
-            encoder,
-            config["dataloader"]["num_classes"],
-            nheads=config["model"]["nheads"],
-            nlayer=config["model"]["nlayers"],
-            device=device
-        ).to(device)
-        total_params, trainable_params = count_parameters(self.model)
-        print(f"Total parameters: {total_params:,}, Trainable parameters: {trainable_params:,}, Share of trainable: {trainable_params / total_params:.2%}")
 
     def _setup_optimizer(self):
         config = self.config
@@ -100,57 +70,6 @@ class Trainer:
             else:
                 print("No checkpoint found. Starting a new run...")
                 self.writer = SummaryWriter(directory=config["paths"]["output"], runname=config["name"])
-
-    def _setup_dataloaders(self):
-        config = self.config
-        if config["training_loc"] == "cluster":
-            self.training_loader = get_cluster_random_loader(
-                root=os.path.join(config["paths"]["dataset"], config["paths"]["train"]),
-                class_index_path=config["paths"]["class_index"],
-                batch_size=config["dataloader"]["batch_size"],
-                num_classes=config["dataloader"]["num_classes"],
-                num_samples=config["dataloader"]["num_samples"],
-                num_images=config["dataloader"]["num_images"],
-                mini=False,
-                num_workers=config["dataloader"]["num_workers"],
-                ratio=config["dataloader"]["train_ratio"]
-            )
-            self.test_loader = get_cluster_random_loader(
-                root=os.path.join(config["paths"]["dataset"], config["paths"]["test"]),
-                batch_size=config["dataloader"]["batch_size"],
-                num_classes=5,
-                num_samples=500,
-                num_images=5,
-                mini=True,
-                num_workers=config["dataloader"]["num_workers"],
-                ratio=config["dataloader"]["test_ratio"]
-            )
-            self.test_loader.dataset.build_image_index()
-            if not self.args.new and self.start_epoch > 0 and self.start_epoch % self.resample_rate != 0:
-                self.training_loader.dataset.build_image_index()
-        else:
-            self.training_loader = get_imagenet_random_loader(
-                root=config["paths"]["dataset"],
-                batch_size=config["dataloader"]["batch_size"],
-                num_classes=config["dataloader"]["num_classes"],
-                num_samples=10000,
-                num_images=config["dataloader"]["num_images"],
-                train=True,
-                exclude_images=self.test_classes,
-                mini=False,
-                num_workers=config["dataloader"]["num_workers"]
-            )
-            self.test_loader = get_imagenet_random_loader(
-                root=config["paths"]["dataset"],
-                batch_size=config["dataloader"]["batch_size"],
-                num_classes=config["dataloader"]["num_classes"],
-                num_samples=10000,
-                num_images=config["dataloader"]["num_images"],
-                train=True,
-                include_images=self.test_classes,
-                mini=True,
-                num_workers=config["dataloader"]["num_workers"]
-            )
 
     def train(self):
         print("Starting training")
