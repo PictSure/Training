@@ -18,7 +18,7 @@ model:
 optimizer:
   lr_initial: 5e-4 # lr_max
   lr_target: 5e-5 # lr_min
-  epochs: 1
+  epochs: 10
   weight_decay: 1e-5
   log_step: 10
   epsilon: 0.1
@@ -29,7 +29,7 @@ optimizer:
   lr_schedule: true
 
 dataloader:
-  num_samples: 10000
+  num_samples: 1000
   batch_size: 8
   num_classes: 5
   num_images: 10
