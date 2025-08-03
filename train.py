@@ -14,6 +14,7 @@ import os
 import argparse
 from torchvision import models
 import time
+from utils.data_loader_cifar10 import get_cifar10_random_loader
 
 if __name__=="__main__":
     parser = argparse.ArgumentParser()
@@ -46,7 +47,7 @@ if __name__=="__main__":
         encoder = ResNetWrapper(classifier)
         encoder_name = "resnet"
     elif config.get("dinov2"):
-        encoder = DINOV2Wrapper(config.get("dinov2"), device=device).to(device)
+        encoder = DINOV2Wrapper(device=device).to(device)
         encoder_name = "dinov2"
     elif config.get("clip"):
         encoder = CLIPWrapper(device=device).to(device)
@@ -54,15 +55,13 @@ if __name__=="__main__":
     else: 
         vit_path = config["paths"].get("visnet_weights") if config.get("pretrained", False) else None
         encoder = VitNetWrapper(path=vit_path, device=device).to(device)
+        encoder_name = "vit"
 
     model = CustomTransformerModel(encoder, config["dataloader"]
                                    ["num_classes"], nheads=config["model"]["nheads"], nlayer=config["model"]["nlayers"], device=device)
     print("Model created")
     model.to(device)
-    total_params, trainable_params = count_parameters(model)
     # Print the number of parameters, but with . notation for better readability
-    print(
-        f"Total parameters: {total_params:,}, Trainable parameters: {trainable_params:,}, Share of trainable: {trainable_params / total_params:.2%}")
     loss_fn = torch.nn.CrossEntropyLoss(
         label_smoothing=config["optimizer"]["epsilon"])
     lr_encoder = float(config["optimizer"]["lr_encoder"])
@@ -75,6 +74,10 @@ if __name__=="__main__":
 
     for param in encoder.parameters():
         param.requires_grad = config["optimizer"]["from_start"]
+
+    total_params, trainable_params = count_parameters(model)
+    print(
+        f"Total parameters: {total_params:,}, Trainable parameters: {trainable_params:,}, Share of trainable: {trainable_params / total_params:.2%}")
 
     optimizer = torch.optim.AdamW([
         {'params': encoder_params, 'lr': lr_encoder},  # Apply a smaller learning rate to the encoder
@@ -119,6 +122,11 @@ if __name__=="__main__":
         test_loader.dataset.build_image_index()
         if not args.new and start_epoch > 0 and start_epoch % resample_rate != 0:
             training_loader.dataset.build_image_index()
+    elif config["training_loc"] == "cifar":
+        training_loader = get_cifar10_random_loader(
+            root=os.path.join(config["paths"]["dataset"], config["paths"]["train"]), batch_size=config["dataloader"]["batch_size"], num_classes=config["dataloader"]["num_classes"], num_samples=config["dataloader"]["num_samples"], num_images=config["dataloader"]["num_images"], num_workers=config["dataloader"]["num_workers"], resize_to_224=True)
+        test_loader = get_cifar10_random_loader(
+            root=os.path.join(config["paths"]["dataset"], config["paths"]["test"]), batch_size=config["dataloader"]["batch_size"], num_classes=5, num_samples=500, num_images=5, num_workers=config["dataloader"]["num_workers"], resize_to_224=True)
     else:
         training_loader = get_imagenet_random_loader(root=config["paths"]["dataset"], batch_size=config["dataloader"]["batch_size"], num_classes=config["dataloader"]["num_classes"], num_samples=10000, num_images=config["dataloader"]["num_images"], train=True, exclude_images=test_classes, mini=False, num_workers=config["dataloader"]["num_workers"])
         test_loader = get_imagenet_random_loader(root=config["paths"]["dataset"], batch_size=config["dataloader"]["batch_size"], num_classes=config["dataloader"]["num_classes"], num_samples=10000, num_images=config["dataloader"]["num_images"], train=True, include_images=test_classes, mini=True, num_workers=config["dataloader"]["num_workers"])

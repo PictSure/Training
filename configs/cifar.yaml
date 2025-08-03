@@ -1,0 +1,38 @@
+training_loc: "cifar"
+
+dinov2: true
+
+name: test
+
+paths:
+  output: output/
+  dataset: ./data
+  train: imagenet-train2.msgpack
+  test: imagenet-test2.msgpack
+  visnet_weights: ./model/vit_triplet_imagenet_new.pth
+
+model:
+  nheads: 4
+  nlayers: 8
+
+optimizer:
+  lr_initial: 5e-4 # lr_max
+  lr_target: 5e-5 # lr_min
+  epochs: 1
+  weight_decay: 1e-5
+  log_step: 10
+  epsilon: 0.1
+  acc_steps: 8
+  lr_encoder: 0.0
+  lr_rest: 5e-4
+  from_start: false
+  lr_schedule: true
+
+dataloader:
+  num_samples: 10000
+  batch_size: 8
+  num_classes: 5
+  num_images: 10
+  train_ratio: 0.02
+  test_ratio: 1
+  num_workers: 0

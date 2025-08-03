@@ -234,7 +234,7 @@ def normalize_dinov2(sampled_images, pred_image, gaussian=False, sharpness=False
         return imgs
 
     sampled_images = resize_and_crop(sampled_images)
-    pred_image = resize_and_crop(pred_image.unsqueeze(0)).squeeze(0)
+    pred_image = resize_and_crop(pred_image)
 
     # Normalize
     sampled_images = (sampled_images - mean) / std
@@ -247,11 +247,12 @@ def normalize_clip(sampled_images, pred_image, gaussian=False, sharpness=False, 
     mean = torch.tensor([0.48145466, 0.4578275, 0.40821073], device=sampled_images.device).view(1, -1, 1, 1)
     std = torch.tensor([0.26862954, 0.26130258, 0.27577711], device=sampled_images.device).view(1, -1, 1, 1)
     rescale_factor = 1.0 / 255.0
-    crop_size = (224, 224)
     resize_size = 224
 
     N, B, C, H, W = sampled_images.size()
     sampled_images = sampled_images.view(N * B, C, H, W)
+
+    print(f"sampled_images shape: {sampled_images.shape}, pred_image shape: {pred_image.shape}")
 
     if gaussian:
         sampled_images, pred_image = apply_noise(sampled_images, pred_image)
@@ -269,7 +270,7 @@ def normalize_clip(sampled_images, pred_image, gaussian=False, sharpness=False, 
         return imgs
 
     sampled_images = resize_and_crop(sampled_images)
-    pred_image = resize_and_crop(pred_image.unsqueeze(0)).squeeze(0)
+    pred_image = resize_and_crop(pred_image)
 
     # Normalize
     sampled_images = (sampled_images - mean) / std
@@ -293,10 +294,12 @@ def normalize_samples(sampled_images, pred_image, gaussian=False, sharpness=Fals
 
     N, B, C, H, W = sampled_images.size()  # sampled_images shape: (N, B, C, H, W)
 
-    if model == "resnet":
+    if model == "resnet" or model == "vit":
         sampled_images, pred_image = resnet_normalize(sampled_images, pred_image, gaussian, sharpness, resize)
     elif model == "dinov2":
         sampled_images, pred_image = normalize_dinov2(sampled_images, pred_image, gaussian, sharpness, resize)
+    elif model == "clip":
+        sampled_images, pred_image = normalize_clip(sampled_images, pred_image, gaussian, sharpness, resize)
 
     # Resize if necessary
     if resize is not None:
