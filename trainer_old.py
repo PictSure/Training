@@ -37,7 +37,7 @@ class Trainer:
         encoder_param_ids = {id(param) for param in encoder_params}
         other_params = [param for param in self.model.parameters() if id(param) not in encoder_param_ids]
         for param in self.encoder.parameters():
-            param.requires_grad = False
+            param.requires_grad = config["optimizer"]["from_start"]
         self.optimizer = torch.optim.AdamW([
             {'params': encoder_params, 'lr': float(config["optimizer"]["lr_encoder"])},
             {'params': other_params, 'lr': float(config["optimizer"]["lr_rest"])}
@@ -49,7 +49,7 @@ class Trainer:
             self.scheduler = CustomLRScheduler(
                 optimizer=self.optimizer,
                 epochs=self.EPOCHS,
-                param_group_index=1,
+                param_group_index=None if config["optimizer"].get("all") else 1,
                 last_epoch=self.start_epoch-1
             )
         else:
@@ -86,6 +86,9 @@ class Trainer:
             total_loss = 0
             if epoch % self.resample_rate == 0 and config["training_loc"] == "cluster":
                 self.training_loader.dataset.build_image_index()
+            if epoch == 100:
+                for param in self.encoder.parameters():
+                    param.requires_grad = True
             self.model.train(True)
             size = len(self.training_loader)
             progressbar = trange(len(self.training_loader), leave=False)
