@@ -12,24 +12,25 @@ class ModelFactory:
         return self._create_transformer(encoder)
 
     def _create_encoder(self):
-        if self.config.get("resnet"):
-            return self._create_resnet_encoder()
+        encoder = self.config.get("encoder")
+        if "resnet" in encoder:
+            encoder_type = encoder.split("-")[-1]
+            return self._create_resnet_encoder(encoder_type)
         return self._create_vit_encoder()
     
-    def _create_resnet_encoder(self):
-        pretrained = self.config.get("pretrained", False)
+    def _create_resnet_encoder(self, encoder_type):
         classifier = (
-            models.resnet18(weights="DEFAULT" if pretrained else None)
-            if self.config["resnet"] == 18
-            else models.resnet34(weights="DEFAULT" if pretrained else None)
-            if self.config["resnet"] == 34
-            else models.resnet50(weights="DEFAULT" if pretrained else None)
+            models.resnet18(weights="DEFAULT")
+            if encoder_type == 18
+            else models.resnet34(weights="DEFAULT")
+            if encoder_type == 34
+            else models.resnet50(weights="DEFAULT")
         )
         encoder = ResNetWrapper(classifier)
         return encoder
     
     def _create_vit_encoder(self):
-        vit_path = self.config["paths"].get("visnet_weights") if self.config.get("pretrained", False) else None
+        vit_path = self.config["paths"].get("visnet_weights")
         encoder = VitNetWrapper(path=vit_path, device=self.device).to(self.device)
         return encoder
     

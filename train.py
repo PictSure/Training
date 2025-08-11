@@ -67,7 +67,7 @@ if __name__=="__main__":
     other_params = [param for param in model.parameters() if id(param) not in encoder_param_ids]
 
     for param in encoder.parameters():
-        param.requires_grad = config["optimizer"]["from_start"]
+        param.requires_grad = False
 
     optimizer = torch.optim.AdamW([
         {'params': encoder_params, 'lr': lr_encoder},  # Apply a smaller learning rate to the encoder
@@ -127,7 +127,7 @@ if __name__=="__main__":
             optimizer=optimizer,
             epochs=EPOCHS,
             # if all variable is False: applies learning rate schedule only to non encoder part and leaves encoder's lr constant
-            param_group_index=None if config["optimizer"].get("all") else 1,
+            param_group_index=1,
             last_epoch=start_epoch-1
         )
 
@@ -145,10 +145,6 @@ if __name__=="__main__":
         total_loss = 0
         if epoch % resample_rate == 0 and config["training_loc"] == "cluster":
             training_loader.dataset.build_image_index()
-        
-        if epoch == 100 and config["optimizer"].get("train_embed", False):
-                for param in encoder.parameters():
-                        param.requires_grad = True
 
         model.train(True)
         size = len(training_loader)
