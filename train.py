@@ -1,8 +1,8 @@
 import torch
 from utils.data_loader_imagenet import normalize_samples, get_cluster_random_loader, get_imagenet_random_loader
 from utils.util import count_parameters
-from model.model_PictSure import CustomTransformerModel, ResNetWrapper
-from model.model_ViT import VitNetWrapper
+from model.model_PictSure import CustomTransformerModel
+from model.wrapper import ResNetWrapper, DINOV2Wrapper, CLIPWrapper, VitNetWrapper
 from utils.summary_writer import SummaryWriter, find_latest_run_directory
 from utils.lr_scheduler import CustomLRScheduler
 from torch.nn.utils import clip_grad_norm_
@@ -14,6 +14,7 @@ import os
 import argparse
 from torchvision import models
 import time
+from utils.data_loader_cifar10 import get_cifar10_random_loader
 
 if __name__=="__main__":
     parser = argparse.ArgumentParser()
@@ -44,18 +45,23 @@ if __name__=="__main__":
             else models.resnet50(pretrained=pretrained)
         )
         encoder = ResNetWrapper(classifier)
+        encoder_name = "resnet"
+    elif config.get("dinov2"):
+        encoder = DINOV2Wrapper(device=device).to(device)
+        encoder_name = "dinov2"
+    elif config.get("clip"):
+        encoder = CLIPWrapper(device=device).to(device)
+        encoder_name = "clip"
     else: 
         vit_path = config["paths"].get("visnet_weights") if config.get("pretrained", False) else None
         encoder = VitNetWrapper(path=vit_path, device=device).to(device)
+        encoder_name = "vit"
 
     model = CustomTransformerModel(encoder, config["dataloader"]
                                    ["num_classes"], nheads=config["model"]["nheads"], nlayer=config["model"]["nlayers"], device=device)
     print("Model created")
     model.to(device)
-    total_params, trainable_params = count_parameters(model)
     # Print the number of parameters, but with . notation for better readability
-    print(
-        f"Total parameters: {total_params:,}, Trainable parameters: {trainable_params:,}, Share of trainable: {trainable_params / total_params:.2%}")
     loss_fn = torch.nn.CrossEntropyLoss(
         label_smoothing=config["optimizer"]["epsilon"])
     lr_encoder = float(config["optimizer"]["lr_encoder"])
@@ -68,6 +74,10 @@ if __name__=="__main__":
 
     for param in encoder.parameters():
         param.requires_grad = False
+
+    total_params, trainable_params = count_parameters(model)
+    print(
+        f"Total parameters: {total_params:,}, Trainable parameters: {trainable_params:,}, Share of trainable: {trainable_params / total_params:.2%}")
 
     optimizer = torch.optim.AdamW([
         {'params': encoder_params, 'lr': lr_encoder},  # Apply a smaller learning rate to the encoder
@@ -112,6 +122,11 @@ if __name__=="__main__":
         test_loader.dataset.build_image_index()
         if not args.new and start_epoch > 0 and start_epoch % resample_rate != 0:
             training_loader.dataset.build_image_index()
+    elif config["training_loc"] == "cifar":
+        training_loader = get_cifar10_random_loader(
+            root=os.path.join(config["paths"]["dataset"], config["paths"]["train"]), batch_size=config["dataloader"]["batch_size"], num_classes=config["dataloader"]["num_classes"], num_samples=config["dataloader"]["num_samples"], num_images=config["dataloader"]["num_images"], num_workers=config["dataloader"]["num_workers"], resize_to_224=True)
+        test_loader = get_cifar10_random_loader(
+            root=os.path.join(config["paths"]["dataset"], config["paths"]["test"]), batch_size=config["dataloader"]["batch_size"], num_classes=5, num_samples=500, num_images=5, num_workers=config["dataloader"]["num_workers"], resize_to_224=True)
     else:
         training_loader = get_imagenet_random_loader(root=config["paths"]["dataset"], batch_size=config["dataloader"]["batch_size"], num_classes=config["dataloader"]["num_classes"], num_samples=10000, num_images=config["dataloader"]["num_images"], train=True, exclude_images=test_classes, mini=False, num_workers=config["dataloader"]["num_workers"])
         test_loader = get_imagenet_random_loader(root=config["paths"]["dataset"], batch_size=config["dataloader"]["batch_size"], num_classes=config["dataloader"]["num_classes"], num_samples=10000, num_images=config["dataloader"]["num_images"], train=True, include_images=test_classes, mini=True, num_workers=config["dataloader"]["num_workers"])
@@ -153,7 +168,7 @@ if __name__=="__main__":
             images, labels, pred_image, pred_label = images.to(device, non_blocking=True), labels.to(
                 device, non_blocking=True), pred_image.to(device, non_blocking=True), pred_label.to(device, non_blocking=True)
             images, pred_image = normalize_samples(
-                images, pred_image, resize=(224, 224))
+                images, pred_image, resize=(224, 224), model=encoder_name)
             
             outputs = model.forward(images, labels, pred_image)
 
