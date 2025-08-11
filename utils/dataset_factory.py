@@ -1,5 +1,6 @@
 import os
 from utils.data_loader_imagenet import get_cluster_random_loader, get_imagenet_random_loader
+from utils.data_loader_cifar10 import get_cifar10_random_loader
 
 
 class DatasetFactory:
@@ -67,5 +68,12 @@ class DatasetFactory:
             mini=True,
             num_workers=self.config["dataloader"]["num_workers"]
         )
+        return training_loader, test_loader
+    
+    def _get_cifar10_loaders(self):
+        training_loader = get_cifar10_random_loader(
+            root=os.path.join(self.config["paths"]["dataset"], self.config["paths"]["train"]), batch_size=self.config["dataloader"]["batch_size"], num_classes=self.config["dataloader"]["num_classes"], num_samples=self.config["dataloader"]["num_samples"], num_images=self.config["dataloader"]["num_images"], num_workers=self.config["dataloader"]["num_workers"], resize_to_224=True)
+        test_loader = get_cifar10_random_loader(
+            root=os.path.join(self.config["paths"]["dataset"], self.config["paths"]["test"]), batch_size=self.config["dataloader"]["batch_size"], num_classes=5, num_samples=500, num_images=5, num_workers=self.config["dataloader"]["num_workers"], resize_to_224=True)
         return training_loader, test_loader
 

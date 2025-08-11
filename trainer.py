@@ -20,7 +20,7 @@ class Trainer:
         self.best_loss = float("inf")
         self.best_acc = 0
         self.start_epoch = 0
-        self.model = ModelFactory(config).create_model()
+        self.model, self.encoder_name = ModelFactory(config).create_model()
         self._setup_optimizer()
         self._setup_writer_and_checkpoint()
         self._setup_lrschedule()
@@ -91,17 +91,23 @@ class Trainer:
             progressbar = trange(len(self.training_loader), leave=False)
             for batch_idx, (images, labels, pred_image, pred_label) in enumerate(self.training_loader):
                 images, labels, pred_image, pred_label = images.to(self.device, non_blocking=True), labels.to(self.device, non_blocking=True), pred_image.to(self.device, non_blocking=True), pred_label.to(self.device, non_blocking=True)
-                images, pred_image = normalize_samples(images, pred_image, resize=(224, 224))
+                images, pred_image = normalize_samples(images, pred_image, resize=(224, 224), model=self.encoder_name)
+
                 outputs = self.model.forward(images, labels, pred_image)
+
                 pred_label = pred_label.view(-1)
                 loss = self.loss_fn(outputs, pred_label)
+                
                 loss = loss / config["optimizer"]["acc_steps"]
                 loss.backward()
+                
                 if (batch_idx + 1) % config["optimizer"]["acc_steps"] == 0:
                     clip_grad_norm_(self.model.parameters(), max_norm=0.5)
                     self.optimizer.step()
                     self.optimizer.zero_grad()
+                
                 total_loss += loss.item()
+                
                 with torch.no_grad():
                     predicted = torch.argmax(outputs, dim=1)
                     correct = (predicted == pred_label).sum().item()
@@ -123,8 +129,10 @@ class Trainer:
                 progressbar = trange(len(self.test_loader), leave=False)
                 for images, labels, pred_image, pred_label in self.test_loader:
                     images, labels, pred_image, pred_label = images.to(self.device, non_blocking=True), labels.to(self.device, non_blocking=True), pred_image.to(self.device, non_blocking=True), pred_label.to(self.device, non_blocking=True)
-                    images, pred_image = normalize_samples(images, pred_image, resize=(224, 224))
+                    images, pred_image = normalize_samples(images, pred_image, resize=(224, 224), model=self.encoder_name)
+
                     outputs = self.model.forward(images, labels, pred_image)
+
                     predicted = torch.argmax(outputs, dim=1)
                     correct = (predicted == pred_label.view(-1)).sum().item()
                     total = pred_label.size(0)
