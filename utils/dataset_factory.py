@@ -14,6 +14,8 @@ class DatasetFactory:
     def get_dataloaders(self):
         if self.config.get("training_loc") == "cluster":
             return self._get_cluster_loaders()
+        elif self.config.get("training_loc") == "cifar":
+             return self._get_cifar10_loaders()
         return self._get_imagenet_loaders()
 
     def _get_cluster_loaders(self):

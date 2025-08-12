@@ -20,7 +20,7 @@ class Trainer:
         self.best_loss = float("inf")
         self.best_acc = 0
         self.start_epoch = 0
-        self.model, self.encoder_name = ModelFactory(config).create_model()
+        self.model, self.encoder_name = ModelFactory(config, device).create_model()
         self._setup_optimizer()
         self._setup_writer_and_checkpoint()
         self._setup_lrschedule()
@@ -33,10 +33,10 @@ class Trainer:
 
     def _setup_optimizer(self):
         config = self.config
-        encoder_params = list(self.encoder.parameters())
+        encoder_params = list(self.model.embedding.parameters())
         encoder_param_ids = {id(param) for param in encoder_params}
         other_params = [param for param in self.model.parameters() if id(param) not in encoder_param_ids]
-        for param in self.encoder.parameters():
+        for param in self.model.embedding.parameters():
             param.requires_grad = False
         self.optimizer = torch.optim.AdamW([
             {'params': encoder_params, 'lr': float(config["optimizer"]["lr_encoder"])},

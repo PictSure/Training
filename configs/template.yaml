@@ -2,7 +2,7 @@ training_loc:
 
 name: 
 
-enocder: 
+encoder: 
 
 paths:
   output:
