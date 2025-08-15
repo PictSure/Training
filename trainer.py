@@ -16,7 +16,6 @@ class Trainer:
         self.device = device
         self.args = args
         self.resample_rate = config.get("resample", 30)
-        self.test_classes = [87, 155, 178, 181, 199, 217, 284, 321, 452, 469, 483, 541, 574, 753, 777, 788, 826, 927, 946]
         self.best_loss = float("inf")
         self.best_acc = 0
         self.start_epoch = 0
