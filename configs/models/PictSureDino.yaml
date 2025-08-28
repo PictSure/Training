@@ -13,8 +13,8 @@ paths:
   class_index: /netscratch/schiesser/embed_then_cat/cluster_class_index.pickle
 
 model:
-  nheads:
-  nlayers:
+  nheads: 8
+  nlayers: 4
 
 optimizer:
   epochs: 600
