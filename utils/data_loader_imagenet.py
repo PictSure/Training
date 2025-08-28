@@ -252,7 +252,7 @@ def normalize_clip(sampled_images, pred_image, gaussian=False, sharpness=False, 
     N, B, C, H, W = sampled_images.size()
     sampled_images = sampled_images.view(N * B, C, H, W)
 
-    print(f"sampled_images shape: {sampled_images.shape}, pred_image shape: {pred_image.shape}")
+    #print(f"sampled_images shape: {sampled_images.shape}, pred_image shape: {pred_image.shape}")
 
     if gaussian:
         sampled_images, pred_image = apply_noise(sampled_images, pred_image)

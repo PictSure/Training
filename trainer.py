@@ -79,6 +79,7 @@ class Trainer:
         print("Starting training")
         epoch_progress = trange(self.start_epoch, self.EPOCHS)
         config = self.config
+        self.model = self.model.to(self.device)
         for epoch in range(self.start_epoch, self.EPOCHS):
             total_correct = 0
             total_samples = 0

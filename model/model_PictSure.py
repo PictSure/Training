@@ -5,16 +5,16 @@ import torch.nn.functional as F
 
 
 class CustomTransformerModel(nn.Module):
-    def __init__(self, embedding_layer, num_classes, nheads=8, nlayer=4, device="cpu"):
+    def __init__(self, embedding_layer, num_classes, nheads=8, nlayer=4, embed_dim=512, device="cpu"):
         super(CustomTransformerModel, self).__init__()
-        self.x_projection = nn.Linear(embedding_layer.latent_dim, 512).to(device)
-        self.y_projection = nn.Linear(num_classes, 512).to(device)
+        self.x_projection = nn.Linear(embedding_layer.latent_dim, embed_dim).to(device)
+        self.y_projection = nn.Linear(num_classes, embed_dim).to(device)
 
         self.transformer_layer = nn.TransformerEncoderLayer(
-            d_model=1024, nhead=nheads, dim_feedforward=2048, norm_first=True
+            d_model=2*embed_dim, nhead=nheads, dim_feedforward=4*embed_dim, norm_first=True
         )
         self.transformer = nn.TransformerEncoder(self.transformer_layer, num_layers=nlayer).to(device)
-        self.fc = nn.Linear(1024, num_classes).to(device)
+        self.fc = nn.Linear(2*embed_dim, num_classes).to(device)
         self.device = device
         self._init_weights()
 

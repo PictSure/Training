@@ -46,5 +46,6 @@ class ModelFactory:
             self.config["dataloader"]["num_classes"],
             nheads=self.config["model"]["nheads"],
             nlayer=self.config["model"]["nlayers"],
+            embed_dim=self.config["model"]["embed_dim"],
             device=self.device
         )

@@ -1,9 +1,8 @@
-training_loc: "local"
-
-
-visnet: false
+training_loc: "cifar"
 
 name: test
+
+encoder: "resnet-34"
 
 paths:
   output: output/
@@ -15,6 +14,7 @@ paths:
 model:
   nheads: 4
   nlayers: 8
+  embed_dim: 768
 
 optimizer:
   lr_initial: 5e-4 # lr_max
@@ -26,6 +26,7 @@ optimizer:
   acc_steps: 8
   lr_encoder: 0.0
   lr_rest: 5e-4
+  lr_schedule: true
 
 dataloader:
   num_samples: 10000
