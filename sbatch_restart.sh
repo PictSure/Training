@@ -22,7 +22,7 @@ function _requeue_on_timeout {
 }
 trap _requeue_on_timeout SIGTERM
 SLURM_RESTART_COUNT=${SLURM_RESTART_COUNT:-0}
-CMD="python3 train.py --config ./configs/models/$CONFIG_PATH"
+CMD="python3 trainer.py --config ./configs/models/$CONFIG_PATH"
 if [ "$SLURM_RESTART_COUNT" -eq 0 ]; then
     CMD="$CMD -n"
 fi
