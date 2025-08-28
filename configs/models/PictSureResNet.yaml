@@ -14,7 +14,8 @@ paths:
 
 model:
   nheads: 8
-  nlayers: 4
+  nlayers: 6
+  embed_dim: 768
 
 optimizer:
   epochs: 600
