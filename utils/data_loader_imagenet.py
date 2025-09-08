@@ -203,7 +203,7 @@ def normalize_dinov2(sampled_images, pred_image, gaussian=False, sharpness=False
     # DINOv2 parameters
     mean = torch.tensor([0.485, 0.456, 0.406], device=sampled_images.device).view(1, -1, 1, 1)
     std = torch.tensor([0.229, 0.224, 0.225], device=sampled_images.device).view(1, -1, 1, 1)
-    rescale_factor = 1.0 / 255.0
+    #rescale_factor = 1.0 / 255.0
     crop_size = (224, 224)
     resize_shortest = 256
 
@@ -217,8 +217,8 @@ def normalize_dinov2(sampled_images, pred_image, gaussian=False, sharpness=False
         sampled_images, pred_image = apply_sharpness(sampled_images, pred_image)
 
     # Rescale to [0, 1]
-    sampled_images = sampled_images * rescale_factor
-    pred_image = pred_image * rescale_factor
+    #sampled_images = sampled_images * rescale_factor
+    #pred_image = pred_image * rescale_factor
 
     # Resize so shortest edge = 256, then center crop to 224x224
     def resize_and_crop(imgs):
@@ -246,7 +246,7 @@ def normalize_dinov2(sampled_images, pred_image, gaussian=False, sharpness=False
 def normalize_clip(sampled_images, pred_image, gaussian=False, sharpness=False, resize=None):
     mean = torch.tensor([0.48145466, 0.4578275, 0.40821073], device=sampled_images.device).view(1, -1, 1, 1)
     std = torch.tensor([0.26862954, 0.26130258, 0.27577711], device=sampled_images.device).view(1, -1, 1, 1)
-    rescale_factor = 1.0 / 255.0
+    #rescale_factor = 1.0 / 255.0
     resize_size = 224
 
     N, B, C, H, W = sampled_images.size()
@@ -260,8 +260,8 @@ def normalize_clip(sampled_images, pred_image, gaussian=False, sharpness=False, 
         sampled_images, pred_image = apply_sharpness(sampled_images, pred_image)
 
     # Rescale to [0, 1]
-    sampled_images = sampled_images * rescale_factor
-    pred_image = pred_image * rescale_factor
+    #sampled_images = sampled_images * rescale_factor
+    #pred_image = pred_image * rescale_factor
 
     def resize_and_crop(imgs):
         # imgs: (N, C, H, W)
