@@ -32,7 +32,7 @@ echo "$CMD"
 srun \
 --container-mounts=/netscratch/$USER:/netscratch/$USER,"$(pwd)":"$(pwd)",/ds:/ds \
 --container-workdir="$(pwd)" \
---container-image=/enroot/nvcr.io_nvidia_pytorch_23.06-py3.sqsh \
+--container-image=/enroot/nvcr.io_nvidia_pytorch_25.02-py3.sqsh \
 install.sh $CMD
 
 echo "Job finished at $(date)"
