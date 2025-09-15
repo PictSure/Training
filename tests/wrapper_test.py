@@ -19,6 +19,9 @@ import yaml
 import torch
 import math
 from pathlib import Path
+import os
+
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 # --- Project imports (must exist in your repo) ---
 from utils.dataset_factory import DatasetFactory
@@ -85,6 +88,7 @@ def main():
 
     dev = _resolve_device(args.device)
     print(f"[INFO] Using device: {dev}")
+    
 
     # --- Load config YAML ---
     cfg_path = Path(args.config)
@@ -174,22 +178,6 @@ def main():
 
     print(f"[EMBED] batch_emb: {_shape_str(batch_emb)}")
     print(f"[EMBED] pred_emb:  {_shape_str(pred_emb)}")
-
-    # Cosine similarity of pred vs each item in the batch (if shapes align)
-    try:
-        if batch_emb is not None and pred_emb is not None:
-            if batch_emb.ndim == 2 and pred_emb.ndim == 2 and batch_emb.size(1) == pred_emb.size(1):
-                sim = _cosine_sim(batch_emb, pred_emb.expand_as(batch_emb))
-                topk = min(5, sim.numel())
-                vals, idxs = torch.topk(sim, k=topk, largest=True)
-                print("[SIM] Top similar indices (pred vs batch):")
-                for r in range(topk):
-                    lbl = labels[idxs[r]].item() if idxs[r] < len(labels) else None
-                    print(f"  #{r+1}: idx={idxs[r].item():4d}  sim={vals[r].item():.4f}  label={lbl}")
-            else:
-                print("[SIM] Skipping similarity: unexpected embedding dimensions.")
-    except Exception as e:
-        print(f"[SIM] Similarity computation failed: {e}")
 
     # Restore train mode if needed
     if model_was_training and hasattr(model, "train"):

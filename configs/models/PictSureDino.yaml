@@ -18,7 +18,7 @@ model:
   embed_dim: 768
 
 optimizer:
-  epochs: 600
+  epochs: 1200
   weight_decay: 1e-5
   log_step: 10
   epsilon: 0.1

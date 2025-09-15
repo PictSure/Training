@@ -1,6 +1,6 @@
 #!/bin/bash
 #SBATCH --output=netscratch/schiesser/output_%j.log
-#SBATCH --partition=H100-SEE
+#SBATCH --partition=H100-SEE,H100
 #SBATCH --gpus=1
 #SBATCH --cpus-per-gpu=10
 #SBATCH --mem=220G
