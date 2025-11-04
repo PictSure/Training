@@ -5,6 +5,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torchvision.transforms as transforms
 from model.model_ViT import VisionTransformer
+import os
     
 class ResNetWrapper(nn.Module):
     def __init__(self, classifier):
@@ -61,7 +62,8 @@ class DINOV3Wrapper(nn.Module):
         super().__init__()
         self.device = device
         self.model = AutoModel.from_pretrained(
-            "facebook/dinov3-vith16plus-pretrain-lvd1689m"
+            "facebook/dinov3-vith16plus-pretrain-lvd1689m",
+            token=os.getenv("HF_TOKEN")
         ).to(device)
         self.model.eval()
 

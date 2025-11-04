@@ -136,6 +136,9 @@ def main():
     images = images.to(dev)
     pred_image = pred_image.to(dev)
 
+    print(f"[STATS] images.min={images.min().item():.4f}  images.max={images.max().item():.4f}")
+    print(f"[STATS] pred_image.min={pred_image.min().item():.4f}  pred_image.max={pred_image.max().item():.4f}")
+
     # --- Normalize / resize ---
     print("[INFO] Normalizing samples...")
     images, pred_image = normalize_samples(

@@ -273,7 +273,7 @@ def normalize_dinov3(sampled_images, pred_image, gaussian=False, sharpness=False
     # DINOv3 parameters from the preprocessing config
     mean = torch.tensor([0.485, 0.456, 0.406], device=device, dtype=torch.float32).view(1, -1, 1, 1)
     std  = torch.tensor([0.229, 0.224, 0.225], device=device, dtype=torch.float32).view(1, -1, 1, 1)
-    rescale_factor = 1.0 / 255.0  # 0.00392156862745098
+    #rescale_factor = 1.0 / 255.0  # 0.00392156862745098
     target_size = resize if resize is not None else (224, 224)
     if isinstance(target_size, int):
         target_size = (target_size, target_size)
@@ -295,8 +295,8 @@ def normalize_dinov3(sampled_images, pred_image, gaussian=False, sharpness=False
         pred_image = pred_image.float()
 
     # Rescale from [0,255] -> [0,1]
-    sampled_images = sampled_images * rescale_factor
-    pred_image = pred_image * rescale_factor
+    # sampled_images = sampled_images * rescale_factor
+    # pred_image = pred_image * rescale_factor
 
     # Direct resize to target (no center crop for DINOv3 config)
     def resize_bilinear(imgs, size):

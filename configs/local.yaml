@@ -2,7 +2,7 @@ training_loc: "cifar"
 
 name: test
 
-encoder: "resnet-34"
+encoder: dinov3
 
 paths:
   output: output/
