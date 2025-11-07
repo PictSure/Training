@@ -5,9 +5,20 @@ import torch.nn.functional as F
 
 
 class CustomTransformerModel(nn.Module):
-    def __init__(self, embedding_layer, num_classes, nheads=8, nlayer=4, embed_dim=512, device="cpu"):
+    def __init__(self, embedding_layer=None, embedding_dim=None, num_classes=10, nheads=8, nlayer=4, embed_dim=512, device="cpu"):
         super(CustomTransformerModel, self).__init__()
-        self.x_projection = nn.Linear(embedding_layer.latent_dim, embed_dim).to(device)
+        if embedding_layer is None and embedding_dim is None:
+            raise ValueError("Either embedding_layer or embedding_dim must be provided.")
+        if embedding_layer is not None and embedding_dim is not None:
+            raise ValueError("Only one of embedding_layer or embedding_dim should be provided.")
+        
+        if embedding_layer is None:
+            self.x_projection = nn.Linear(embedding_dim, embed_dim).to(device)
+        else:
+            self.x_projection = nn.Linear(embedding_layer.latent_dim, embed_dim).to(device)
+            self.embedding = embedding_layer.to(device)
+            for param in self.embedding.parameters():
+                param.requires_grad = True
         self.y_projection = nn.Linear(num_classes, embed_dim).to(device)
 
         self.transformer_layer = nn.TransformerEncoderLayer(
@@ -19,11 +30,6 @@ class CustomTransformerModel(nn.Module):
         self._init_weights()
 
         self.num_classes = num_classes
-
-        self.embedding = embedding_layer.to(device)
-
-        for param in self.embedding.parameters():
-            param.requires_grad = True
 
         self.x_projection.requires_grad = True
         self.y_projection.requires_grad = True
@@ -48,6 +54,9 @@ class CustomTransformerModel(nn.Module):
         else:
             x_embedded = x_train
             x_pred_embedded = x_pred
+
+            if x_pred_embedded.ndim == 2:
+                x_pred_embedded = x_pred_embedded.unsqueeze(1)
 
         x_projected = self.x_projection(x_embedded)  # Shape: (batch, seq, projection_dim)
 

@@ -15,6 +15,8 @@ import argparse
 from torchvision import models
 import time
 from utils.data_loader_cifar10 import get_cifar10_random_loader
+from dataset.duckdb_loader import DuckDBEmbeddingDataset, collate_embedding_batch
+from torch.utils.data import DataLoader
 
 if __name__=="__main__":
     parser = argparse.ArgumentParser()
@@ -35,57 +37,84 @@ if __name__=="__main__":
     )
     print(f"Using {device} device")
     # set up encoder either resnet or ViT
-    if config.get("resnet"):
-        pretrained = config.get("pretrained", False)
-        classifier = (
-            models.resnet18(pretrained=pretrained)
-            if config["resnet"] == 18
-            else models.resnet34(pretrained=pretrained)
-            if config["resnet"] == 34
-            else models.resnet50(pretrained=pretrained)
+    if config.get("duckdb-path"):
+        dataset = DuckDBEmbeddingDataset(
+            db_path=config["duckdb-path"],
+            dataset_name="data",
+            n_samples=config["dataloader"]["num_images"],
+            groups_per_epoch=config["dataloader"]["num_samples"],
+            n_classes=config["dataloader"]["num_classes"],
+            device=device,
         )
-        encoder = ResNetWrapper(classifier)
-        encoder_name = "resnet"
-    elif config.get("dinov2"):
-        encoder = DINOV2Wrapper(device=device).to(device)
-        encoder_name = "dinov2"
-    elif config.get("dinov3"):
-        encoder = DINOV3Wrapper(device=device).to(device)
-        encoder_name = "dinov3"
-    elif config.get("clip"):
-        encoder = CLIPWrapper(device=device).to(device)
-        encoder_name = "clip"
-    else: 
-        vit_path = config["paths"].get("visnet_weights") if config.get("pretrained", False) else None
-        encoder = VitNetWrapper(path=vit_path, device=device).to(device)
-        encoder_name = "vit"
 
-    model = CustomTransformerModel(encoder, config["dataloader"]
-                                   ["num_classes"], nheads=config["model"]["nheads"], nlayer=config["model"]["nlayers"], device=device)
+        # With DataLoader (batches multiple JSONL lines together):
+        training_loader = DataLoader(
+            dataset,
+            batch_size=32,
+            num_workers=config["dataloader"]["num_workers"],         # increase if you want parallel I/O
+            collate_fn=collate_embedding_batch,
+            pin_memory=False,
+        )
+        test_loader = None
+    else:
+        if config.get("resnet"):
+            pretrained = config.get("pretrained", False)
+            classifier = (
+                models.resnet18(pretrained=pretrained)
+                if config["resnet"] == 18
+                else models.resnet34(pretrained=pretrained)
+                if config["resnet"] == 34
+                else models.resnet50(pretrained=pretrained)
+            )
+            encoder = ResNetWrapper(classifier)
+            encoder_name = "resnet"
+        elif config.get("dinov2"):
+            encoder = DINOV2Wrapper(device=device).to(device)
+            encoder_name = "dinov2"
+        elif config.get("dinov3"):
+            encoder = DINOV3Wrapper(device=device).to(device)
+            encoder_name = "dinov3"
+        elif config.get("clip"):
+            encoder = CLIPWrapper(device=device).to(device)
+            encoder_name = "clip"
+        else: 
+            vit_path = config["paths"].get("visnet_weights") if config.get("pretrained", False) else None
+            encoder = VitNetWrapper(path=vit_path, device=device).to(device)
+            encoder_name = "vit"
+
+    if config.get("duckdb-path"):
+        embedding_dim = dataset.embedding_dim
+        model = CustomTransformerModel(embedding_dim=embedding_dim, num_classes=config["dataloader"]["num_classes"],
+                                       nheads=config["model"]["nheads"], nlayer=config["model"]["nlayers"], embed_dim=config["model"]["embed_dim"], device=device)
+        optimizer = torch.optim.AdamW(model.parameters(), lr=float(config["optimizer"]["lr_rest"]), weight_decay=float(config["optimizer"]["weight_decay"]))
+    else:
+        model = CustomTransformerModel(encoder=encoder, num_classes=config["dataloader"]
+                                       ["num_classes"], nheads=config["model"]["nheads"], nlayer=config["model"]["nlayers"], embed_dim=config["model"]["embed_dim"], device=device)
+        encoder_params = list(encoder.parameters())
+        encoder_param_ids = {id(param) for param in encoder_params}
+        other_params = [param for param in model.parameters() if id(param) not in encoder_param_ids]
+
+        lr_encoder = float(config["optimizer"]["lr_encoder"])
+        lr_rest = float(config["optimizer"]["lr_rest"])
+
+        optimizer = torch.optim.AdamW([
+            {'params': encoder_params, 'lr': lr_encoder},  # Apply a smaller learning rate to the encoder
+            {'params': other_params, 'lr': lr_rest}          # Apply the default learning rate to the rest of the model
+        ], weight_decay=float(config["optimizer"]["weight_decay"]))
+
+        for param in encoder.parameters():
+            param.requires_grad = False
     print("Model created")
     model.to(device)
     # Print the number of parameters, but with . notation for better readability
     loss_fn = torch.nn.CrossEntropyLoss(
         label_smoothing=config["optimizer"]["epsilon"])
-    lr_encoder = float(config["optimizer"]["lr_encoder"])
-    lr_rest = float(config["optimizer"]["lr_rest"])
     start_epoch = 0
-
-    encoder_params = list(encoder.parameters())
-    encoder_param_ids = {id(param) for param in encoder_params}
-    other_params = [param for param in model.parameters() if id(param) not in encoder_param_ids]
-
-    for param in encoder.parameters():
-        param.requires_grad = False
 
     total_params, trainable_params = count_parameters(model)
     print(
         f"Total parameters: {total_params:,}, Trainable parameters: {trainable_params:,}, Share of trainable: {trainable_params / total_params:.2%}")
 
-    optimizer = torch.optim.AdamW([
-        {'params': encoder_params, 'lr': lr_encoder},  # Apply a smaller learning rate to the encoder
-        {'params': other_params, 'lr': lr_rest}          # Apply the default learning rate to the rest of the model
-    ], weight_decay=float(config["optimizer"]["weight_decay"]))
     best_loss = float("inf")
     best_acc = 0
     if args.new:
@@ -116,37 +145,47 @@ if __name__=="__main__":
 
     test_classes = [87, 155, 178, 181, 199, 217, 284, 321,
                     452, 469, 483, 541, 574, 753, 777, 788, 826, 927, 946]
-    print("Creating dataloader")
-    if config["training_loc"] == "cluster":
-        training_loader = get_cluster_random_loader(
-            root=os.path.join(config["paths"]["dataset"], config["paths"]["train"]), class_index_path=config["paths"]["class_index"], batch_size=config["dataloader"]["batch_size"], num_classes=config["dataloader"]["num_classes"], num_samples=config["dataloader"]["num_samples"], num_images=config["dataloader"]["num_images"], mini=False, num_workers=config["dataloader"]["num_workers"], ratio=config["dataloader"]["train_ratio"])
-        test_loader = get_cluster_random_loader(
-            root=os.path.join(config["paths"]["dataset"], config["paths"]["test"]), batch_size=config["dataloader"]["batch_size"], num_classes=5, num_samples=500, num_images=5, mini=True, num_workers=config["dataloader"]["num_workers"], ratio=config["dataloader"]["test_ratio"])
-        test_loader.dataset.build_image_index()
-        if not args.new and start_epoch > 0 and start_epoch % resample_rate != 0:
-            training_loader.dataset.build_image_index()
-    elif config["training_loc"] == "cifar":
-        training_loader = get_cifar10_random_loader(
-            root=os.path.join(config["paths"]["dataset"], config["paths"]["train"]), batch_size=config["dataloader"]["batch_size"], num_classes=config["dataloader"]["num_classes"], num_samples=config["dataloader"]["num_samples"], num_images=config["dataloader"]["num_images"], num_workers=config["dataloader"]["num_workers"], resize_to_224=True)
-        test_loader = get_cifar10_random_loader(
-            root=os.path.join(config["paths"]["dataset"], config["paths"]["test"]), batch_size=config["dataloader"]["batch_size"], num_classes=5, num_samples=500, num_images=5, num_workers=config["dataloader"]["num_workers"], resize_to_224=True)
-    else:
-        training_loader = get_imagenet_random_loader(root=config["paths"]["dataset"], batch_size=config["dataloader"]["batch_size"], num_classes=config["dataloader"]["num_classes"], num_samples=10000, num_images=config["dataloader"]["num_images"], train=True, exclude_images=test_classes, mini=False, num_workers=config["dataloader"]["num_workers"])
-        test_loader = get_imagenet_random_loader(root=config["paths"]["dataset"], batch_size=config["dataloader"]["batch_size"], num_classes=config["dataloader"]["num_classes"], num_samples=10000, num_images=config["dataloader"]["num_images"], train=True, include_images=test_classes, mini=True, num_workers=config["dataloader"]["num_workers"])
+    
+    if not config.get("duckdb-path"):
+        print("Creating dataloader")
+        if config["training_loc"] == "cluster":
+            training_loader = get_cluster_random_loader(
+                root=os.path.join(config["paths"]["dataset"], config["paths"]["train"]), class_index_path=config["paths"]["class_index"], batch_size=config["dataloader"]["batch_size"], num_classes=config["dataloader"]["num_classes"], num_samples=config["dataloader"]["num_samples"], num_images=config["dataloader"]["num_images"], mini=False, num_workers=config["dataloader"]["num_workers"], ratio=config["dataloader"]["train_ratio"])
+            test_loader = get_cluster_random_loader(
+                root=os.path.join(config["paths"]["dataset"], config["paths"]["test"]), batch_size=config["dataloader"]["batch_size"], num_classes=5, num_samples=500, num_images=5, mini=True, num_workers=config["dataloader"]["num_workers"], ratio=config["dataloader"]["test_ratio"])
+            test_loader.dataset.build_image_index()
+            if not args.new and start_epoch > 0 and start_epoch % resample_rate != 0:
+                training_loader.dataset.build_image_index()
+        elif config["training_loc"] == "cifar":
+            training_loader = get_cifar10_random_loader(
+                root=os.path.join(config["paths"]["dataset"], config["paths"]["train"]), batch_size=config["dataloader"]["batch_size"], num_classes=config["dataloader"]["num_classes"], num_samples=config["dataloader"]["num_samples"], num_images=config["dataloader"]["num_images"], num_workers=config["dataloader"]["num_workers"], resize_to_224=True)
+            test_loader = get_cifar10_random_loader(
+                root=os.path.join(config["paths"]["dataset"], config["paths"]["test"]), batch_size=config["dataloader"]["batch_size"], num_classes=5, num_samples=500, num_images=5, num_workers=config["dataloader"]["num_workers"], resize_to_224=True)
+        else:
+            training_loader = get_imagenet_random_loader(root=config["paths"]["dataset"], batch_size=config["dataloader"]["batch_size"], num_classes=config["dataloader"]["num_classes"], num_samples=10000, num_images=config["dataloader"]["num_images"], train=True, exclude_images=test_classes, mini=False, num_workers=config["dataloader"]["num_workers"])
+            test_loader = get_imagenet_random_loader(root=config["paths"]["dataset"], batch_size=config["dataloader"]["batch_size"], num_classes=config["dataloader"]["num_classes"], num_samples=10000, num_images=config["dataloader"]["num_images"], train=True, include_images=test_classes, mini=True, num_workers=config["dataloader"]["num_workers"])
 
-    print("DataLoader created")
+        print("DataLoader created")
+
     if start_epoch >= 100 and config["optimizer"].get("train_embed", False):
             for param in encoder.parameters():
                     param.requires_grad = True
 
     EPOCHS = config["optimizer"]["epochs"]
-    if config["optimizer"]["lr_schedule"]:
+    if config["optimizer"]["lr_schedule"] and config.get("duckdb-path") is None:
         scheduler = CustomLRScheduler(
             optimizer=optimizer,
             epochs=EPOCHS,
-            # if all variable is False: applies learning rate schedule only to non encoder part and leaves encoder's lr constant
             param_group_index=1,
             last_epoch=start_epoch-1
+        )
+    else:
+        scheduler = CustomLRScheduler(
+            optimizer=optimizer,
+            epochs=EPOCHS,
+            last_epoch=start_epoch-1,
+            warmup_epochs=EPOCHS*0.2,
+            plateau_epochs=EPOCHS*0.1
         )
 
     losses = []
@@ -158,6 +197,7 @@ if __name__=="__main__":
 
     for epoch in range(start_epoch, EPOCHS):
         
+        print(f"Epoch {epoch+1}/{EPOCHS} with lr_encoder={optimizer.param_groups[0]['lr']}")
         total_correct = 0
         total_samples = 0
         total_loss = 0
@@ -170,10 +210,14 @@ if __name__=="__main__":
         for batch_idx, (images, labels, pred_image, pred_label) in enumerate(training_loader):
             images, labels, pred_image, pred_label = images.to(device, non_blocking=True), labels.to(
                 device, non_blocking=True), pred_image.to(device, non_blocking=True), pred_label.to(device, non_blocking=True)
-            images, pred_image = normalize_samples(
-                images, pred_image, resize=(224, 224), model=encoder_name)
             
-            outputs = model.forward(images, labels, pred_image)
+            if not config.get("duckdb-path"):
+                images, pred_image = normalize_samples(
+                    images, pred_image, resize=(224, 224), model=encoder_name)
+
+                outputs = model.forward(images, labels, pred_image)
+            else:
+                outputs = model.forward(images, labels, pred_image, embedd=False)
 
             pred_label = pred_label.view(-1)
             loss = loss_fn(outputs, pred_label)
@@ -201,66 +245,81 @@ if __name__=="__main__":
                     "loss": loss.item(), "acc": acc
                 })
             progressbar.update()
+            progressbar.set_description(
+                "Batch [{:>5d}/{:>5d}], Loss {:.4f}, Acc: {:.2f}".format(
+                    batch_idx+1, size, loss.item(), acc
+                )
+            )
         progressbar.close()
+
+        avg_loss = total_loss / size
+        accuracy = total_correct / total_samples
+        losses.append(avg_loss)
+        accuracies.append(accuracy)
 
         if (batch_idx + 1) % config["optimizer"]["acc_steps"] != 0:
             clip_grad_norm_(model.parameters(), max_norm=0.5)
             optimizer.step()
             optimizer.zero_grad()
-        
-        test_correct = 0
-        test_samples = 0
-        with torch.no_grad():
-            progressbar = trange(len(test_loader), leave=False)
-            for images, labels, pred_image, pred_label in test_loader:
-                images, labels, pred_image, pred_label = images.to(device, non_blocking=True), labels.to(
-                    device, non_blocking=True), pred_image.to(device, non_blocking=True), pred_label.to(device, non_blocking=True)
-                images, pred_image = normalize_samples(
-                    images, pred_image, resize=(224, 224))
 
-                outputs = model.forward(images, labels, pred_image)
-                predicted = torch.argmax(outputs, dim=1)
-                correct = (predicted == pred_label.view(-1)).sum().item()
-                total = pred_label.size(0)
-                test_correct += correct
-                test_samples += total
-                progressbar.update()
-            progressbar.close()
+        if test_loader is not None:
+            test_correct = 0
+            test_samples = 0
+            with torch.no_grad():
+                progressbar = trange(len(test_loader), leave=False)
+                for images, labels, pred_image, pred_label in test_loader:
+                    images, labels, pred_image, pred_label = images.to(device, non_blocking=True), labels.to(
+                        device, non_blocking=True), pred_image.to(device, non_blocking=True), pred_label.to(device, non_blocking=True)
+                    images, pred_image = normalize_samples(
+                        images, pred_image, resize=(224, 224))
 
-        test_acc = test_correct / test_samples
-        avg_loss = total_loss / size
-        accuracy = total_correct / total_samples
-        
-        test_accuracies.append(test_acc)
-        losses.append(avg_loss)
-        accuracies.append(accuracy)
+                    outputs = model.forward(images, labels, pred_image)
+                    predicted = torch.argmax(outputs, dim=1)
+                    correct = (predicted == pred_label.view(-1)).sum().item()
+                    total = pred_label.size(0)
+                    test_correct += correct
+                    test_samples += total
+                    progressbar.update()
+                progressbar.close()
 
-        total_grad_norm = 0.0
-        grad_param_count = 0
-        for param in model.parameters():
-            if param.grad is not None:
-                total_grad_norm += param.grad.norm().item()
-                grad_param_count += 1
-        avg_grad_norm = total_grad_norm / grad_param_count if grad_param_count > 0 else 0.0
-        epoch_progress.update()
-        epoch_progress.set_description(
-            "Epoch [{:>5d}/{:>5d}], Loss {:.4f}, Accuracy: {:.2f}, Test Acc: {:.2f}, Avg Gradient Norm: {:.6f}".format(
-                epoch+1, EPOCHS, avg_loss, accuracy, test_acc, avg_grad_norm
+            test_acc = test_correct / test_samples
+            
+            test_accuracies.append(test_acc)
+
+            total_grad_norm = 0.0
+            grad_param_count = 0
+            for param in model.parameters():
+                if param.grad is not None:
+                    total_grad_norm += param.grad.norm().item()
+                    grad_param_count += 1
+            avg_grad_norm = total_grad_norm / grad_param_count if grad_param_count > 0 else 0.0
+            epoch_progress.update()
+            epoch_progress.set_description(
+                "Epoch [{:>5d}/{:>5d}], Loss {:.4f}, Accuracy: {:.2f}, Test Acc: {:.2f}, Avg Gradient Norm: {:.6f}".format(
+                    epoch+1, EPOCHS, avg_loss, accuracy, test_acc, avg_grad_norm
+                )
             )
-        )
+            writer.log_epoch_metrics("train", epoch, {
+                "loss": avg_loss, "acc": accuracy, "test_acc": test_acc, "avg_grad_norm": avg_grad_norm, "lrs": [param_group["lr"] if any(p.requires_grad for p in param_group["params"]) else None for param_group in optimizer.param_groups]
+            })
+            writer.flush()
+        else:
+            epoch_progress.update()
+            epoch_progress.set_description(
+                "Epoch [{:>5d}/{:>5d}], Loss {:.4f}, Accuracy: {:.2f}".format(
+                    epoch+1, EPOCHS, avg_loss, accuracy
+                )
+            )
+            writer.log_epoch_metrics("train", epoch, {
+                "loss": avg_loss, "acc": accuracy, "lrs": [param_group["lr"] if any(p.requires_grad for p in param_group["params"]) else None for param_group in optimizer.param_groups]
+            })
+            writer.flush()
         if config["optimizer"]["lr_schedule"]:
             scheduler.step()
 
-        writer.log_epoch_metrics("train", epoch, {
-            "loss": avg_loss, "acc": accuracy, "test_acc": test_acc, "avg_grad_norm": avg_grad_norm, "lrs": [param_group["lr"] if any(p.requires_grad for p in param_group["params"]) else None for param_group in optimizer.param_groups]
-        })
-        writer.flush()
         if avg_loss < best_loss:
             best_loss = avg_loss
             writer.save_model(model=model, filename="best_loss_model.pt")
-        if test_acc > best_acc:
-            best_acc = test_acc
-            writer.save_model(model=model, filename="best_acc_model.pt")
         checkpoint = {
             "epoch": epoch,
             "model_state": model.state_dict(),

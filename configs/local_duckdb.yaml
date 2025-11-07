@@ -1,0 +1,34 @@
+training_loc: "cifar"
+
+name: test
+
+duckdb-path: "dataset/test.duckdb"
+
+paths:
+  output: "output/test"
+
+model:
+  nheads: 8
+  nlayers: 4
+  embed_dim: 1024
+
+optimizer:
+  lr_initial: 5e-4 # lr_max
+  lr_target: 5e-5 # lr_min
+  epochs: 20
+  weight_decay: 1e-5
+  log_step: 10
+  epsilon: 0.1
+  acc_steps: 1
+  lr_encoder: 0.0
+  lr_rest: 5e-4
+  lr_schedule: true
+
+dataloader:
+  num_samples: 10000
+  batch_size: 32
+  num_classes: 5
+  num_images: 10
+  train_ratio: 0.02
+  test_ratio: 1
+  num_workers: 0

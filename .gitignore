@@ -132,3 +132,4 @@ weights/pretrained_viznet_no_triplet.pt
 cluster_class_index.pickle
 
 plots/
+*.duckdb
