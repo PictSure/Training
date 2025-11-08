@@ -44,7 +44,8 @@ if __name__=="__main__":
             n_samples=config["dataloader"]["num_images"],
             groups_per_epoch=config["dataloader"]["num_samples"],
             n_classes=config["dataloader"]["num_classes"],
-            device=device,
+            verbose=False,
+            # device=device,
         )
 
         # With DataLoader (batches multiple JSONL lines together):

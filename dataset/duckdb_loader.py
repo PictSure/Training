@@ -56,7 +56,7 @@ class DuckDBEmbeddingDataset(IterableDataset):
         n_classes: int,
         groups_per_epoch: Optional[int] = None,
         dtype: torch.dtype = torch.float32,
-        device: Optional[torch.device] = None,
+        device: Optional[torch.device] = "cpu",
         table_name: str = "embeddings",
         read_only: bool = True,
         verbose: bool = True,
@@ -72,6 +72,7 @@ class DuckDBEmbeddingDataset(IterableDataset):
         self.table_name = table_name
         self.read_only = read_only
         self.verbose = verbose
+        self._num_workers = 0
 
         self.embedding_dim = self._get_embedding_dim()
 
@@ -261,6 +262,8 @@ class DuckDBEmbeddingDataset(IterableDataset):
             base_seed = torch.initial_seed()  # large 64-bit number
             random.seed(base_seed ^ (worker_info.id + 0x9E3779B97F4A7C15))
 
+        self._num_workers = worker_info.num_workers if worker_info is not None else 1
+
         conn = self._open_conn()
         try:
             # Discover labels per worker (avoids sharing state across processes)
@@ -272,7 +275,7 @@ class DuckDBEmbeddingDataset(IterableDataset):
                 )
 
             n = 0
-            while self.groups_per_epoch is None or n < self.groups_per_epoch:
+            while self.groups_per_epoch is None or n < (self.groups_per_epoch // self._num_workers):
                 record = self._sample(
                     conn,
                     dataset_labels,
