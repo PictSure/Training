@@ -18,6 +18,97 @@ from utils.data_loader_cifar10 import get_cifar10_random_loader
 from dataset.duckdb_loader import DuckDBEmbeddingDataset, collate_embedding_batch
 from torch.utils.data import DataLoader
 
+
+def setup_duckdb_training(config, device):
+    dataset = DuckDBEmbeddingDataset(
+        db_path=config["duckdb-path"],
+        dataset_name="data",
+        n_samples=config["dataloader"]["num_images"],
+        groups_per_epoch=config["dataloader"]["num_samples"],
+        n_classes=config["dataloader"]["num_classes"],
+        verbose=False,
+    )
+
+    training_loader = DataLoader(
+        dataset,
+        batch_size=32,
+        num_workers=config["dataloader"]["num_workers"],
+        collate_fn=collate_embedding_batch,
+        pin_memory=False,
+    )
+
+    embedding_dim = dataset.embedding_dim
+    model = CustomTransformerModel(
+        embedding_dim=embedding_dim,
+        num_classes=config["dataloader"]["num_classes"],
+        nheads=config["model"]["nheads"],
+        nlayer=config["model"]["nlayers"],
+        embed_dim=config["model"]["embed_dim"],
+        device=device,
+    )
+    optimizer = torch.optim.AdamW(
+        model.parameters(),
+        lr=float(config["optimizer"]["lr_rest"]),
+        weight_decay=float(config["optimizer"]["weight_decay"]),
+    )
+
+    return model, optimizer, training_loader, None, None, None
+
+
+def setup_embedding_training(config, device):
+    if config.get("resnet"):
+        pretrained = config.get("pretrained", False)
+        classifier = (
+            models.resnet18(pretrained=pretrained)
+            if config["resnet"] == 18
+            else models.resnet34(pretrained=pretrained)
+            if config["resnet"] == 34
+            else models.resnet50(pretrained=pretrained)
+        )
+        encoder = ResNetWrapper(classifier)
+        encoder_name = "resnet"
+    elif config.get("dinov2"):
+        encoder = DINOV2Wrapper(device=device).to(device)
+        encoder_name = "dinov2"
+    elif config.get("dinov3"):
+        encoder = DINOV3Wrapper(device=device).to(device)
+        encoder_name = "dinov3"
+    elif config.get("clip"):
+        encoder = CLIPWrapper(device=device).to(device)
+        encoder_name = "clip"
+    else:
+        vit_path = config["paths"].get("visnet_weights") if config.get("pretrained", False) else None
+        encoder = VitNetWrapper(path=vit_path, device=device).to(device)
+        encoder_name = "vit"
+
+    model = CustomTransformerModel(
+        encoder=encoder,
+        num_classes=config["dataloader"]["num_classes"],
+        nheads=config["model"]["nheads"],
+        nlayer=config["model"]["nlayers"],
+        embed_dim=config["model"]["embed_dim"],
+        device=device,
+    )
+    encoder_params = list(encoder.parameters())
+    encoder_param_ids = {id(param) for param in encoder_params}
+    other_params = [param for param in model.parameters() if id(param) not in encoder_param_ids]
+
+    lr_encoder = float(config["optimizer"]["lr_encoder"])
+    lr_rest = float(config["optimizer"]["lr_rest"])
+
+    optimizer = torch.optim.AdamW(
+        [
+            {"params": encoder_params, "lr": lr_encoder},
+            {"params": other_params, "lr": lr_rest},
+        ],
+        weight_decay=float(config["optimizer"]["weight_decay"]),
+    )
+
+    for param in encoder.parameters():
+        param.requires_grad = False
+
+    return model, optimizer, None, None, encoder, encoder_name
+
 if __name__=="__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('--config', '-c', help='Path to config file', default='./configs/slurm.yaml')
@@ -36,75 +127,10 @@ if __name__=="__main__":
         else "cpu"
     )
     print(f"Using {device} device")
-    # set up encoder either resnet or ViT
     if config.get("duckdb-path"):
-        dataset = DuckDBEmbeddingDataset(
-            db_path=config["duckdb-path"],
-            dataset_name="data",
-            n_samples=config["dataloader"]["num_images"],
-            groups_per_epoch=config["dataloader"]["num_samples"],
-            n_classes=config["dataloader"]["num_classes"],
-            verbose=False,
-            # device=device,
-        )
-
-        # With DataLoader (batches multiple JSONL lines together):
-        training_loader = DataLoader(
-            dataset,
-            batch_size=32,
-            num_workers=config["dataloader"]["num_workers"],         # increase if you want parallel I/O
-            collate_fn=collate_embedding_batch,
-            pin_memory=False,
-        )
-        test_loader = None
+        model, optimizer, training_loader, test_loader, encoder, encoder_name = setup_duckdb_training(config, device)
     else:
-        if config.get("resnet"):
-            pretrained = config.get("pretrained", False)
-            classifier = (
-                models.resnet18(pretrained=pretrained)
-                if config["resnet"] == 18
-                else models.resnet34(pretrained=pretrained)
-                if config["resnet"] == 34
-                else models.resnet50(pretrained=pretrained)
-            )
-            encoder = ResNetWrapper(classifier)
-            encoder_name = "resnet"
-        elif config.get("dinov2"):
-            encoder = DINOV2Wrapper(device=device).to(device)
-            encoder_name = "dinov2"
-        elif config.get("dinov3"):
-            encoder = DINOV3Wrapper(device=device).to(device)
-            encoder_name = "dinov3"
-        elif config.get("clip"):
-            encoder = CLIPWrapper(device=device).to(device)
-            encoder_name = "clip"
-        else: 
-            vit_path = config["paths"].get("visnet_weights") if config.get("pretrained", False) else None
-            encoder = VitNetWrapper(path=vit_path, device=device).to(device)
-            encoder_name = "vit"
-
-    if config.get("duckdb-path"):
-        embedding_dim = dataset.embedding_dim
-        model = CustomTransformerModel(embedding_dim=embedding_dim, num_classes=config["dataloader"]["num_classes"],
-                                       nheads=config["model"]["nheads"], nlayer=config["model"]["nlayers"], embed_dim=config["model"]["embed_dim"], device=device)
-        optimizer = torch.optim.AdamW(model.parameters(), lr=float(config["optimizer"]["lr_rest"]), weight_decay=float(config["optimizer"]["weight_decay"]))
-    else:
-        model = CustomTransformerModel(encoder=encoder, num_classes=config["dataloader"]
-                                       ["num_classes"], nheads=config["model"]["nheads"], nlayer=config["model"]["nlayers"], embed_dim=config["model"]["embed_dim"], device=device)
-        encoder_params = list(encoder.parameters())
-        encoder_param_ids = {id(param) for param in encoder_params}
-        other_params = [param for param in model.parameters() if id(param) not in encoder_param_ids]
-
-        lr_encoder = float(config["optimizer"]["lr_encoder"])
-        lr_rest = float(config["optimizer"]["lr_rest"])
-
-        optimizer = torch.optim.AdamW([
-            {'params': encoder_params, 'lr': lr_encoder},  # Apply a smaller learning rate to the encoder
-            {'params': other_params, 'lr': lr_rest}          # Apply the default learning rate to the rest of the model
-        ], weight_decay=float(config["optimizer"]["weight_decay"]))
-
-        for param in encoder.parameters():
-            param.requires_grad = False
+        model, optimizer, training_loader, test_loader, encoder, encoder_name = setup_embedding_training(config, device)
     print("Model created")
     model.to(device)
     # Print the number of parameters, but with . notation for better readability
@@ -168,9 +194,9 @@ if __name__=="__main__":
 
         print("DataLoader created")
 
-    if start_epoch >= 100 and config["optimizer"].get("train_embed", False):
-            for param in encoder.parameters():
-                    param.requires_grad = True
+    if encoder is not None and start_epoch >= 100 and config["optimizer"].get("train_embed", False):
+        for param in encoder.parameters():
+            param.requires_grad = True
 
     EPOCHS = config["optimizer"]["epochs"]
     if config["optimizer"]["lr_schedule"] and config.get("duckdb-path") is None:
