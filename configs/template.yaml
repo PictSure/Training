@@ -2,10 +2,7 @@ training_loc:
 
 name: 
 
-resnet:
-visnet:
-
-pretrained:
+encoder: 
 
 paths:
   output:
@@ -25,8 +22,6 @@ optimizer:
   log_step:
   epsilon:
   acc_steps:
-  all:
-  from_start:
   lr_encoder:
   lr_rest:
   lr_schedule:

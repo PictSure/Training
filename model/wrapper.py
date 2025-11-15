@@ -5,6 +5,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torchvision.transforms as transforms
 from model.model_ViT import VisionTransformer
+import os
     
 class ResNetWrapper(nn.Module):
     def __init__(self, classifier):
@@ -44,6 +45,54 @@ class DINOV2Wrapper(nn.Module):
         cls_embeddings = outputs.last_hidden_state[:, 0, :]
         cls_embeddings = cls_embeddings.view(batch_size, num_images, self.latent_dim)
         return cls_embeddings
+
+class DINOV3Wrapper(nn.Module):
+    """
+    Wrapper for 'facebook/dinov3-vith16plus-pretrain-lvd1689m' that **assumes inputs are already
+    preprocessed** (rescaled to [0,1], resized to 224x224 (or model-acceptable size), and
+    normalized with ImageNet mean/std in channels-first format).
+
+    Expected input to forward:
+        x: Tensor of shape (batch, num_images, 3, H, W)  -- pre-normalized.
+    Returns:
+        CLS embeddings of shape (batch, num_images, latent_dim)
+    """
+
+    def __init__(self, device: str = "cpu"):
+        super().__init__()
+        self.device = device
+        self.model = AutoModel.from_pretrained(
+            "facebook/dinov3-vith16plus-pretrain-lvd1689m",
+            token=os.getenv("HF_TOKEN")
+        ).to(device)
+        self.model.eval()
+
+        # Probe latent dim using a dummy pixel_values tensor (already "normalized" zeros).
+        with torch.no_grad():
+            dummy = torch.zeros(1, 3, 224, 224, device=self.device, dtype=torch.float32)
+            out = self.model(pixel_values=dummy)
+        self.latent_dim = out.last_hidden_state.shape[-1]
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """
+        x: (batch, num_images, 3, H, W) -- already preprocessed/normalized.
+        """
+        bsz, nimg = x.size(0), x.size(1)
+
+        # Flatten to (batch*num_images, 3, H, W)
+        x = x.view(-1, x.size(2), x.size(3), x.size(4))
+
+        # Ensure device/dtype are suitable for the model
+        if x.dtype != torch.float32:
+            x = x.float()
+        x = x.to(self.device, non_blocking=True)
+
+        with torch.no_grad():
+            outputs = self.model(pixel_values=x)  # bypass processor; pixel_values expected
+            cls = outputs.last_hidden_state[:, 0, :]  # (batch*nimg, dim)
+
+        cls = cls.view(bsz, nimg, self.latent_dim)
+        return cls
 
 class CLIPWrapper(nn.Module):
     def __init__(self, device="cpu"):

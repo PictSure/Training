@@ -1,0 +1,41 @@
+training_loc: "cluster"
+
+name: PictSureClip
+
+encoder: clip
+
+paths:
+  output: /netscratch/schiesser/embed_then_cat/runs/
+  dataset: /netscratch/schiesser/inet/
+  train: imagenet21k-train.msgpack
+  test: imagenet21k-test.msgpack
+  visnet_weights: /netscratch/schiesser/embed_then_cat/vit_triplet_imagenet_new.pth
+  class_index: /netscratch/schiesser/embed_then_cat/cluster_class_index.pickle
+
+model:
+  nheads: 8
+  nlayers: 6
+  embed_dim: 768
+
+optimizer:
+  epochs: 1200
+  weight_decay: 1e-5
+  log_step: 10
+  epsilon: 0.1
+  acc_steps: 1
+  lr_encoder: 0.0
+  lr_rest: 5e-5
+  lr_schedule: true
+  lr_initial: 5e-4 # lr_max
+  lr_target: 5e-5 # lr_min
+
+dataloader:
+  num_samples: 10000
+  batch_size: 12
+  num_classes: 10
+  num_images: 5
+  train_ratio: 0.01
+  test_ratio: 1
+  num_workers: 10
+
+resample: 10

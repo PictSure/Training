@@ -130,3 +130,6 @@ inet21k_class_to_idx.json
 *.pt
 weights/pretrained_viznet_no_triplet.pt
 cluster_class_index.pickle
+
+plots/
+sbatch_restart.sh

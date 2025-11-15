@@ -1,0 +1,45 @@
+training_loc: cluster
+
+name: VisPreStart
+
+
+visnet: true
+pretrained: true
+
+paths:
+  output: /netscratch/schiesser/embed_then_cat/runs/
+  dataset: /netscratch/schiesser/inet/
+  train: imagenet21k-train.msgpack
+  test: imagenet21k-test.msgpack
+  visnet_weights: /netscratch/schiesser/embed_then_cat/pretrained_viznet_no_triplet.pt
+  class_index: /netscratch/schiesser/embed_then_cat/cluster_class_index.pickle
+
+model:
+  nheads: 8
+  nlayers: 4
+
+optimizer:
+  lr_initial: 5e-4
+  lr_target: 5e-5
+  epochs: 600
+  weight_decay: 1e-5
+  log_step: 10
+  epsilon: 0.1
+  acc_steps: 1
+  all: false
+  from_start: true
+  train_embed: true
+  lr_schedule: true
+  lr_encoder: 5e-5
+  lr_rest: 5e-5
+
+dataloader:
+  num_samples: 10000
+  batch_size: 10
+  num_classes: 10
+  num_images: 5
+  train_ratio: 0.01
+  test_ratio: 1
+  num_workers: 10
+
+resample: 10
