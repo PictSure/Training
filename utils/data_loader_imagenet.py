@@ -203,7 +203,7 @@ def normalize_dinov2(sampled_images, pred_image, gaussian=False, sharpness=False
     # DINOv2 parameters
     mean = torch.tensor([0.485, 0.456, 0.406], device=sampled_images.device).view(1, -1, 1, 1)
     std = torch.tensor([0.229, 0.224, 0.225], device=sampled_images.device).view(1, -1, 1, 1)
-    rescale_factor = 1.0 / 255.0
+    #rescale_factor = 1.0 / 255.0
     crop_size = (224, 224)
     resize_shortest = 256
 
@@ -217,8 +217,8 @@ def normalize_dinov2(sampled_images, pred_image, gaussian=False, sharpness=False
         sampled_images, pred_image = apply_sharpness(sampled_images, pred_image)
 
     # Rescale to [0, 1]
-    sampled_images = sampled_images * rescale_factor
-    pred_image = pred_image * rescale_factor
+    #sampled_images = sampled_images * rescale_factor
+    #pred_image = pred_image * rescale_factor
 
     # Resize so shortest edge = 256, then center crop to 224x224
     def resize_and_crop(imgs):
@@ -243,16 +243,87 @@ def normalize_dinov2(sampled_images, pred_image, gaussian=False, sharpness=False
     return sampled_images, pred_image
 
 
+def normalize_dinov3(sampled_images, pred_image, gaussian=False, sharpness=False, resize=None):
+    """
+    Normalize the input and prediction images for DINOv3 preprocessing.
+
+    Matches config:
+      - data_format: channels_first
+      - do_rescale: True (1/255)
+      - do_normalize: True (mean/std as below)
+      - do_resize: True (default 224x224, bilinear)
+      - no center crop (crop_size=None)
+
+    Args:
+        sampled_images (torch.Tensor): (N, B, C, H, W)
+        pred_image (torch.Tensor): (B, C, H, W)
+        gaussian (bool): optionally apply gaussian noise/blur via apply_noise(...)
+        sharpness (bool): optionally apply sharpness via apply_sharpness(...)
+        resize (int | tuple[int,int] | None): target size; defaults to (224, 224).
+            - int n -> (n, n)
+            - tuple (h, w) -> (h, w)
+
+    Returns:
+        normalized_sampled_images (torch.Tensor): (N*B, C, Ht, Wt)
+        normalized_pred_image (torch.Tensor): (B, C, Ht, Wt)
+    """
+    device = sampled_images.device
+    dtype = sampled_images.dtype
+
+    # DINOv3 parameters from the preprocessing config
+    mean = torch.tensor([0.485, 0.456, 0.406], device=device, dtype=torch.float32).view(1, -1, 1, 1)
+    std  = torch.tensor([0.229, 0.224, 0.225], device=device, dtype=torch.float32).view(1, -1, 1, 1)
+    #rescale_factor = 1.0 / 255.0  # 0.00392156862745098
+    target_size = resize if resize is not None else (224, 224)
+    if isinstance(target_size, int):
+        target_size = (target_size, target_size)
+    assert isinstance(target_size, (tuple, list)) and len(target_size) == 2, "resize must be int or (H, W)"
+
+    N, B, C, H, W = sampled_images.size()
+    sampled_images = sampled_images.view(N * B, C, H, W)
+
+    # Optional augmentations (user-defined functions; assumed available)
+    if gaussian:
+        sampled_images, pred_image = apply_noise(sampled_images, pred_image)
+    if sharpness:
+        sampled_images, pred_image = apply_sharpness(sampled_images, pred_image)
+
+    # Ensure float for rescale/normalize
+    if sampled_images.dtype != torch.float32:
+        sampled_images = sampled_images.float()
+    if pred_image.dtype != torch.float32:
+        pred_image = pred_image.float()
+
+    # Rescale from [0,255] -> [0,1]
+    # sampled_images = sampled_images * rescale_factor
+    # pred_image = pred_image * rescale_factor
+
+    # Direct resize to target (no center crop for DINOv3 config)
+    def resize_bilinear(imgs, size):
+        # imgs: (N, C, H, W) or (B, C, H, W)
+        return F.interpolate(imgs, size=size, mode="bilinear", align_corners=False)
+
+    sampled_images = resize_bilinear(sampled_images, target_size)
+    pred_image = resize_bilinear(pred_image, target_size)
+
+    # Normalize
+    sampled_images = (sampled_images - mean) / std
+    pred_image = (pred_image - mean) / std
+
+    return sampled_images, pred_image
+
+
+
 def normalize_clip(sampled_images, pred_image, gaussian=False, sharpness=False, resize=None):
     mean = torch.tensor([0.48145466, 0.4578275, 0.40821073], device=sampled_images.device).view(1, -1, 1, 1)
     std = torch.tensor([0.26862954, 0.26130258, 0.27577711], device=sampled_images.device).view(1, -1, 1, 1)
-    rescale_factor = 1.0 / 255.0
+    #rescale_factor = 1.0 / 255.0
     resize_size = 224
 
     N, B, C, H, W = sampled_images.size()
     sampled_images = sampled_images.view(N * B, C, H, W)
 
-    print(f"sampled_images shape: {sampled_images.shape}, pred_image shape: {pred_image.shape}")
+    #print(f"sampled_images shape: {sampled_images.shape}, pred_image shape: {pred_image.shape}")
 
     if gaussian:
         sampled_images, pred_image = apply_noise(sampled_images, pred_image)
@@ -260,8 +331,8 @@ def normalize_clip(sampled_images, pred_image, gaussian=False, sharpness=False, 
         sampled_images, pred_image = apply_sharpness(sampled_images, pred_image)
 
     # Rescale to [0, 1]
-    sampled_images = sampled_images * rescale_factor
-    pred_image = pred_image * rescale_factor
+    #sampled_images = sampled_images * rescale_factor
+    #pred_image = pred_image * rescale_factor
 
     def resize_and_crop(imgs):
         # imgs: (N, C, H, W)
@@ -300,6 +371,10 @@ def normalize_samples(sampled_images, pred_image, gaussian=False, sharpness=Fals
         sampled_images, pred_image = normalize_dinov2(sampled_images, pred_image, gaussian, sharpness, resize)
     elif model == "clip":
         sampled_images, pred_image = normalize_clip(sampled_images, pred_image, gaussian, sharpness, resize)
+    elif model == "dinov3":
+        sampled_images, pred_image = normalize_dinov3(sampled_images, pred_image, gaussian, sharpness, resize)
+    else:
+        raise ValueError(f"Unknown model type for normalization: {model}")
 
     # Resize if necessary
     if resize is not None:

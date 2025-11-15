@@ -74,14 +74,14 @@ class ImageNetDataDingsSet(Dataset):
         if class_index_path:
             with open(class_index_path, "rb") as f:
                 data_dict = pickle.load(f)
-            return data_dict
-        data_dict = defaultdict(list)
-        progressbar = trange(len(self.dataset))
-        for i in range(len(self.dataset)):
-            sample = self.dataset[i]
-            data_dict[sample["label"]].append(i)
-            progressbar.update()
-        progressbar.close()
+        else: 
+            data_dict = defaultdict(list)
+            progressbar = trange(len(self.dataset))
+            for i in range(len(self.dataset)):
+                sample = self.dataset[i]
+                data_dict[sample["label"]].append(i)
+                progressbar.update()
+            progressbar.close()
         return data_dict
     
     def build_image_index(self):

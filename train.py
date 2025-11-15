@@ -2,7 +2,7 @@ import torch
 from utils.data_loader_imagenet import normalize_samples, get_cluster_random_loader, get_imagenet_random_loader
 from utils.util import count_parameters
 from model.model_PictSure import CustomTransformerModel
-from model.wrapper import ResNetWrapper, DINOV2Wrapper, CLIPWrapper, VitNetWrapper
+from model.wrapper import ResNetWrapper, DINOV2Wrapper, CLIPWrapper, VitNetWrapper, DINOV3Wrapper
 from utils.summary_writer import SummaryWriter, find_latest_run_directory
 from utils.lr_scheduler import CustomLRScheduler
 from torch.nn.utils import clip_grad_norm_
@@ -49,6 +49,9 @@ if __name__=="__main__":
     elif config.get("dinov2"):
         encoder = DINOV2Wrapper(device=device).to(device)
         encoder_name = "dinov2"
+    elif config.get("dinov3"):
+        encoder = DINOV3Wrapper(device=device).to(device)
+        encoder_name = "dinov3"
     elif config.get("clip"):
         encoder = CLIPWrapper(device=device).to(device)
         encoder_name = "clip"
@@ -73,7 +76,7 @@ if __name__=="__main__":
     other_params = [param for param in model.parameters() if id(param) not in encoder_param_ids]
 
     for param in encoder.parameters():
-        param.requires_grad = config["optimizer"]["from_start"]
+        param.requires_grad = False
 
     total_params, trainable_params = count_parameters(model)
     print(
@@ -116,7 +119,7 @@ if __name__=="__main__":
     print("Creating dataloader")
     if config["training_loc"] == "cluster":
         training_loader = get_cluster_random_loader(
-            root=os.path.join(config["paths"]["dataset"], config["paths"]["train"]), class_index_path=["paths"]["class_index"], batch_size=config["dataloader"]["batch_size"], num_classes=config["dataloader"]["num_classes"], num_samples=config["dataloader"]["num_samples"], num_images=config["dataloader"]["num_images"], mini=False, num_workers=config["dataloader"]["num_workers"], ratio=config["dataloader"]["train_ratio"])
+            root=os.path.join(config["paths"]["dataset"], config["paths"]["train"]), class_index_path=config["paths"]["class_index"], batch_size=config["dataloader"]["batch_size"], num_classes=config["dataloader"]["num_classes"], num_samples=config["dataloader"]["num_samples"], num_images=config["dataloader"]["num_images"], mini=False, num_workers=config["dataloader"]["num_workers"], ratio=config["dataloader"]["train_ratio"])
         test_loader = get_cluster_random_loader(
             root=os.path.join(config["paths"]["dataset"], config["paths"]["test"]), batch_size=config["dataloader"]["batch_size"], num_classes=5, num_samples=500, num_images=5, mini=True, num_workers=config["dataloader"]["num_workers"], ratio=config["dataloader"]["test_ratio"])
         test_loader.dataset.build_image_index()
@@ -132,7 +135,7 @@ if __name__=="__main__":
         test_loader = get_imagenet_random_loader(root=config["paths"]["dataset"], batch_size=config["dataloader"]["batch_size"], num_classes=config["dataloader"]["num_classes"], num_samples=10000, num_images=config["dataloader"]["num_images"], train=True, include_images=test_classes, mini=True, num_workers=config["dataloader"]["num_workers"])
 
     print("DataLoader created")
-    if start_epoch >= 100:
+    if start_epoch >= 100 and config["optimizer"].get("train_embed", False):
             for param in encoder.parameters():
                     param.requires_grad = True
 
@@ -142,7 +145,7 @@ if __name__=="__main__":
             optimizer=optimizer,
             epochs=EPOCHS,
             # if all variable is False: applies learning rate schedule only to non encoder part and leaves encoder's lr constant
-            param_group_index=None if config["optimizer"].get("all") else 1,
+            param_group_index=1,
             last_epoch=start_epoch-1
         )
 
@@ -160,10 +163,6 @@ if __name__=="__main__":
         total_loss = 0
         if epoch % resample_rate == 0 and config["training_loc"] == "cluster":
             training_loader.dataset.build_image_index()
-        
-        if epoch == 100:
-                for param in encoder.parameters():
-                        param.requires_grad = True
 
         model.train(True)
         size = len(training_loader)

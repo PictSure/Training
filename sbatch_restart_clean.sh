@@ -1,6 +1,6 @@
 #!/bin/bash
 #SBATCH --output=netscratch/schiesser/output_%j.log
-#SBATCH --partition=H100-SEE
+#SBATCH --partition=H100-SEE,H100
 #SBATCH --gpus=1
 #SBATCH --cpus-per-gpu=10
 #SBATCH --mem=220G
@@ -22,17 +22,20 @@ function _requeue_on_timeout {
 }
 trap _requeue_on_timeout SIGTERM
 SLURM_RESTART_COUNT=${SLURM_RESTART_COUNT:-0}
-CMD="python3 train.py --config ./configs/models/$CONFIG_PATH"
+CMD="python3 trainer.py --config ./configs/models/$CONFIG_PATH"
 if [ "$SLURM_RESTART_COUNT" -eq 0 ]; then
     CMD="$CMD -n"
 fi
 
 echo "$CMD"
 
+export HF_TOKEN=XXX
+
 srun \
 --container-mounts=/netscratch/$USER:/netscratch/$USER,"$(pwd)":"$(pwd)",/ds:/ds \
 --container-workdir="$(pwd)" \
---container-image=/enroot/nvcr.io_nvidia_pytorch_23.06-py3.sqsh \
+--container-image=/enroot/nvcr.io_nvidia_pytorch_25.02-py3.sqsh \
+--export=ALL,HF_TOKEN \
 install.sh $CMD
 
 echo "Job finished at $(date)"
