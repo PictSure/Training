@@ -15,6 +15,7 @@ paths:
 model:
   nheads:
   nlayers:
+  embed_dim:
 
 optimizer:
   epochs:

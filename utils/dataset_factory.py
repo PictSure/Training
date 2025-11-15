@@ -1,6 +1,8 @@
 import os
 from utils.data_loader_imagenet import get_cluster_random_loader, get_imagenet_random_loader
 from utils.data_loader_cifar10 import get_cifar10_random_loader
+from dataset.duckdb_loader import DuckDBEmbeddingDataset, collate_embedding_batch
+from torch.utils.data import DataLoader
 
 
 class DatasetFactory:
@@ -14,6 +16,8 @@ class DatasetFactory:
     def get_dataloaders(self):
         if self.config.get("training_loc") == "cluster":
             return self._get_cluster_loaders()
+        elif self.config.get("training_loc") == "duckdb":
+             return self._get_duckdb_loaders()
         elif self.config.get("training_loc") == "cifar":
              return self._get_cifar10_loaders()
         return self._get_imagenet_loaders()
@@ -78,4 +82,28 @@ class DatasetFactory:
         test_loader = get_cifar10_random_loader(
             root=os.path.join(self.config["paths"]["dataset"], self.config["paths"]["test"]), batch_size=self.config["dataloader"]["batch_size"], num_classes=5, num_samples=500, num_images=5, num_workers=self.config["dataloader"]["num_workers"], resize_to_224=True)
         return training_loader, test_loader
-
+    
+    def _get_duckdb_loaders(self):
+        dataset = DuckDBEmbeddingDataset(
+            db_path=self.config["duckdb-path"],
+            dataset_name="data",
+            n_samples=self.config["dataloader"]["num_images"],
+            groups_per_epoch=self.config["dataloader"]["num_samples"],
+            n_classes=self.config["dataloader"]["num_classes"],
+            verbose=False,
+        )
+        training_loader = DataLoader(
+            dataset,
+            batch_size=32,
+            num_workers=self.config["dataloader"]["num_workers"],
+            collate_fn=collate_embedding_batch,
+            pin_memory=False,
+        )
+        test_loader = DataLoader(
+            dataset,
+            batch_size=32,
+            num_workers=self.config["dataloader"]["num_workers"],
+            collate_fn=collate_embedding_batch,
+            pin_memory=False,
+        )
+        return training_loader, test_loader

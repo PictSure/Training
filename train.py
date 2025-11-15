@@ -82,7 +82,7 @@ def setup_embedding_training(config, device):
         encoder_name = "vit"
 
     model = CustomTransformerModel(
-        encoder=encoder,
+        embedding_layer=encoder,
         num_classes=config["dataloader"]["num_classes"],
         nheads=config["model"]["nheads"],
         nlayer=config["model"]["nlayers"],

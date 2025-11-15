@@ -19,38 +19,59 @@ class Trainer:
         self.best_loss = float("inf")
         self.best_acc = 0
         self.start_epoch = 0
+        self.EPOCHS = self.config["optimizer"]["epochs"]
+        self.training_loader, self.test_loader = DatasetFactory(config, args, self.start_epoch).get_dataloaders()
+        try:
+            self.config["embedding_dim"] = self.training_loader.dataset.embedding_dim
+        except:
+            self.config["embedding_dim"] = None
         self.model, self.encoder_name = ModelFactory(config, device).create_model()
         self._setup_optimizer()
         self._setup_writer_and_checkpoint()
         self._setup_lrschedule()
-        self.training_loader, self.test_loader = DatasetFactory(config, args, self.start_epoch).get_dataloaders()
         self.loss_fn = torch.nn.CrossEntropyLoss(label_smoothing=config["optimizer"]["epsilon"])
         self.losses = []
         self.accuracies = []
         self.test_accuracies = []
         self.writer.log_hyperparameters(config)
 
+
     def _setup_optimizer(self):
         config = self.config
-        encoder_params = list(self.model.embedding.parameters())
-        encoder_param_ids = {id(param) for param in encoder_params}
-        other_params = [param for param in self.model.parameters() if id(param) not in encoder_param_ids]
-        for param in self.model.embedding.parameters():
-            param.requires_grad = False
-        self.optimizer = torch.optim.AdamW([
-            {'params': encoder_params, 'lr': float(config["optimizer"]["lr_encoder"])},
-            {'params': other_params, 'lr': float(config["optimizer"]["lr_rest"])}
-        ], weight_decay=float(config["optimizer"]["weight_decay"]))
+        if config.get("encoder"):
+            encoder_params = list(self.model.embedding.parameters())
+            encoder_param_ids = {id(param) for param in encoder_params}
+            other_params = [param for param in self.model.parameters() if id(param) not in encoder_param_ids]
+            for param in self.model.embedding.parameters():
+                param.requires_grad = False
+            self.optimizer = torch.optim.AdamW([
+                {'params': encoder_params, 'lr': float(config["optimizer"]["lr_encoder"])},
+                {'params': other_params, 'lr': float(config["optimizer"]["lr_rest"])}
+            ], weight_decay=float(config["optimizer"]["weight_decay"]))
+        else:
+            self.optimizer = torch.optim.AdamW(
+                self.model.parameters(),
+                lr=float(config["optimizer"]["lr_rest"]),
+                weight_decay=float(config["optimizer"]["weight_decay"]),
+            )
 
     def _setup_lrschedule(self):
-        self.EPOCHS = config["optimizer"]["epochs"]
-        if config["optimizer"]["lr_schedule"]:
-            self.scheduler = CustomLRScheduler(
-                optimizer=self.optimizer,
-                epochs=self.EPOCHS,
-                param_group_index=1,
-                last_epoch=self.start_epoch-1
-            )
+        if self.config["optimizer"]["lr_schedule"]:
+            if self.config.get("encoder") is not None:
+                self.scheduler = CustomLRScheduler(
+                    optimizer=self.optimizer,
+                    epochs=self.EPOCHS,
+                    param_group_index=1,
+                    last_epoch=self.start_epoch-1
+                )
+            else:
+                self.scheduler = CustomLRScheduler(
+                    optimizer=self.optimizer,
+                    epochs=self.EPOCHS,
+                    last_epoch=self.start_epoch-1,
+                    warmup_epochs=self.EPOCHS*0.2,
+                    plateau_epochs=self.EPOCHS*0.1
+                )
         else:
             self.scheduler = None
 
@@ -91,9 +112,12 @@ class Trainer:
             progressbar = trange(len(self.training_loader), leave=False)
             for batch_idx, (images, labels, pred_image, pred_label) in enumerate(self.training_loader):
                 images, labels, pred_image, pred_label = images.to(self.device, non_blocking=True), labels.to(self.device, non_blocking=True), pred_image.to(self.device, non_blocking=True), pred_label.to(self.device, non_blocking=True)
-                images, pred_image = normalize_samples(images, pred_image, resize=(224, 224), model=self.encoder_name)
+                if config.get("encoder") is not None:
+                    images, pred_image = normalize_samples(images, pred_image, resize=(224, 224), model=self.encoder_name)
 
-                outputs = self.model.forward(images, labels, pred_image)
+                    outputs = self.model.forward(images, labels, pred_image)
+                else:
+                    outputs = self.model.forward(images, labels, pred_image, embedd=False)
 
                 pred_label = pred_label.view(-1)
                 loss = self.loss_fn(outputs, pred_label)
@@ -129,9 +153,12 @@ class Trainer:
                 progressbar = trange(len(self.test_loader), leave=False)
                 for images, labels, pred_image, pred_label in self.test_loader:
                     images, labels, pred_image, pred_label = images.to(self.device, non_blocking=True), labels.to(self.device, non_blocking=True), pred_image.to(self.device, non_blocking=True), pred_label.to(self.device, non_blocking=True)
-                    images, pred_image = normalize_samples(images, pred_image, resize=(224, 224), model=self.encoder_name)
+                    if config.get("encoder") is not None:
+                        images, pred_image = normalize_samples(images, pred_image, resize=(224, 224), model=self.encoder_name)
 
-                    outputs = self.model.forward(images, labels, pred_image)
+                        outputs = self.model.forward(images, labels, pred_image)
+                    else:
+                        outputs = self.model.forward(images, labels, pred_image, embedd=False)
 
                     predicted = torch.argmax(outputs, dim=1)
                     correct = (predicted == pred_label.view(-1)).sum().item()
