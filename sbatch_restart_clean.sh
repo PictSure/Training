@@ -29,10 +29,13 @@ fi
 
 echo "$CMD"
 
+export HF_TOKEN=XXX
+
 srun \
 --container-mounts=/netscratch/$USER:/netscratch/$USER,"$(pwd)":"$(pwd)",/ds:/ds \
 --container-workdir="$(pwd)" \
 --container-image=/enroot/nvcr.io_nvidia_pytorch_25.02-py3.sqsh \
+--export=ALL,HF_TOKEN \
 install.sh $CMD
 
 echo "Job finished at $(date)"

@@ -133,3 +133,4 @@ cluster_class_index.pickle
 
 plots/
 *.duckdb
+sbatch_restart.sh
