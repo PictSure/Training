@@ -1,4 +1,4 @@
-training_loc: "cifar"
+training_loc: "duckdb"
 
 name: test
 

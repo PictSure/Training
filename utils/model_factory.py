@@ -14,18 +14,19 @@ class ModelFactory:
 
     def _create_encoder(self):
         encoder = self.config.get("encoder")
-        if "resnet" in encoder:
-            encoder_type = encoder.split("-")[-1]
-            encoder = "resnet"
-            return self._create_resnet_encoder(encoder_type), encoder
-        elif encoder == "dinov2":
-            return DINOV2Wrapper(device=self.device).to(self.device), encoder
-        elif encoder == "dinov3":
-            return DINOV3Wrapper(device=self.device).to(self.device), encoder
-        elif encoder == "clip":
-            return CLIPWrapper(device=self.device).to(self.device), encoder
-        elif "vit" in encoder.lower():
-            return self._create_vit_encoder(), encoder
+        if encoder:
+            if "resnet" in encoder:
+                encoder_type = encoder.split("-")[-1]
+                encoder = "resnet"
+                return self._create_resnet_encoder(encoder_type), encoder
+            elif encoder == "dinov2":
+                return DINOV2Wrapper(device=self.device).to(self.device), encoder
+            elif encoder == "dinov3":
+                return DINOV3Wrapper(device=self.device).to(self.device), encoder
+            elif encoder == "clip":
+                return CLIPWrapper(device=self.device).to(self.device), encoder
+            elif "vit" in encoder.lower():
+                return self._create_vit_encoder(), encoder
         return None, None
     
     def _create_resnet_encoder(self, encoder_type):

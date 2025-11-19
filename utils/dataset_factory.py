@@ -84,24 +84,33 @@ class DatasetFactory:
         return training_loader, test_loader
     
     def _get_duckdb_loaders(self):
-        dataset = DuckDBEmbeddingDataset(
-            db_path=self.config["duckdb-path"],
+        train_dataset = DuckDBEmbeddingDataset(
+            db_path=os.path.join(self.config["paths"]["dataset"], self.config["paths"]["train"]),
             dataset_name="data",
             n_samples=self.config["dataloader"]["num_images"],
             groups_per_epoch=self.config["dataloader"]["num_samples"],
             n_classes=self.config["dataloader"]["num_classes"],
             verbose=False,
         )
+        test_dataset = DuckDBEmbeddingDataset(
+            db_path=os.path.join(self.config["paths"]["dataset"], self.config["paths"]["test"]),
+            dataset_name="data",
+            n_samples=self.config["dataloader"]["num_images"],
+            groups_per_epoch=self.config["dataloader"]["num_samples"],
+            n_classes=self.config["dataloader"]["num_classes"],
+            verbose=False,
+        )
+
         training_loader = DataLoader(
-            dataset,
-            batch_size=32,
+            train_dataset,
+            batch_size=self.config["dataloader"]["batch_size"],
             num_workers=self.config["dataloader"]["num_workers"],
             collate_fn=collate_embedding_batch,
             pin_memory=False,
         )
         test_loader = DataLoader(
-            dataset,
-            batch_size=32,
+            test_dataset,
+            batch_size=self.config["dataloader"]["batch_size"],
             num_workers=self.config["dataloader"]["num_workers"],
             collate_fn=collate_embedding_batch,
             pin_memory=False,
