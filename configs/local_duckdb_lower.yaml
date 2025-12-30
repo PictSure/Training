@@ -2,7 +2,7 @@ training_loc: "duckdb"
 
 name: test
 
-duckdb-path: "/home/rechenschieber/Documents/GitHub/dataset/output/hierarchical.duckdb"
+duckdb-path: "/home/rechenschieber/Documents/GitHub/dataset/output/dinov2.duckdb"
 
 paths:
   output: "output/duckdb_test"
@@ -13,9 +13,9 @@ model:
   embed_dim: 1536
 
 optimizer:
-  lr: 0.001
-  lr_initial: 5e-4 # lr_max
-  lr_target: 5e-5 # lr_min
+  lr: 0.0005
+  lr_initial: 1e-5 # lr_max
+  lr_target: 1e-6 # lr_min
   epochs: 1200
   weight_decay: 1e-5
   log_step: 10

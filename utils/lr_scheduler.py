@@ -18,7 +18,7 @@ class CustomLRScheduler(torch.optim.lr_scheduler._LRScheduler):
         self.lr_min = lr_min
         self.warmup_epochs = warmup_epochs
         self.plateau_epochs = plateau_epochs
-        self.decay_epochs = epochs - (self.warmup_epochs + self.plateau_epochs)
+        self.decay_epochs = max(epochs - (self.warmup_epochs + self.plateau_epochs), 0.0)
         if param_group_index is None:
             self.param_group_index = "all"
         elif isinstance(param_group_index, int):
@@ -30,7 +30,7 @@ class CustomLRScheduler(torch.optim.lr_scheduler._LRScheduler):
     def get_lr(self):
         epoch = self.last_epoch + 1  # Adjust to match human-readable epochs (1-based)
         
-        if epoch <= self.warmup_epochs:
+        if self.warmup_epochs > 0 and epoch <= self.warmup_epochs:
             # Linear warmup: start at 0, go to lr_max
             scheduled_lr = self.lr_max * (epoch / self.warmup_epochs)
         elif epoch <= self.warmup_epochs + self.plateau_epochs:
@@ -39,8 +39,11 @@ class CustomLRScheduler(torch.optim.lr_scheduler._LRScheduler):
         else:
             # Logarithmic decay from lr_max to lr_min
             decay_epoch = epoch - (self.warmup_epochs + self.plateau_epochs)
-            decay_factor = (decay_epoch / self.decay_epochs)  # Normalize
-            scheduled_lr = self.lr_max * (self.lr_min / self.lr_max) ** decay_factor
+            if self.decay_epochs <= 0:
+                scheduled_lr = self.lr_min
+            else:
+                decay_factor = (decay_epoch / self.decay_epochs)  # Normalize
+                scheduled_lr = self.lr_max * (self.lr_min / self.lr_max) ** decay_factor
 
         new_lrs = []
         
