@@ -52,11 +52,25 @@ def _estimate_num_batches(loader):
 
 
 def setup_duckdb_training(config, device):
+    # Validate and prepare dataset weights if provided
+    dataset_weights = config.get("dataset_weights", None)
+    if dataset_weights is not None:
+        if not isinstance(dataset_weights, dict):
+            raise ValueError("dataset_weights must be a dictionary mapping dataset names to weights")
+        
+        total_weight = sum(dataset_weights.values())
+        if abs(total_weight - 1.0) > 1e-6:  # Allow small floating point errors
+            raise ValueError(
+                f"dataset_weights must sum to 1.0, but got sum={total_weight:.6f}. "
+                f"Provided weights: {dataset_weights}"
+            )
+    
     dataset = HierarchicalDuckDBEpisodicDatasetCashed(
         db_path=config["duckdb-path"],
         num_classes=config["dataloader"]["num_classes"],
         samples_per_class=config["dataloader"]["num_images"],
         episodes=config["dataloader"]["num_samples"],
+        dataset_weights=dataset_weights,
         device="cpu",
         return_dataset_name=True,
     )

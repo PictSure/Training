@@ -38,6 +38,7 @@ class _BaseDuckDBEpisodicDataset(IterableDataset):
         num_classes: int = 5,
         samples_per_class: int = 5,
         dataset: Optional[str] = None,
+        dataset_weights: Optional[Dict[str, float]] = None,
         dtype: torch.dtype = torch.float32,
         device: Union[str, torch.device] = "cpu",
         episodes: Optional[int] = None,
@@ -52,6 +53,7 @@ class _BaseDuckDBEpisodicDataset(IterableDataset):
         self.num_classes = num_classes
         self.samples_per_class = samples_per_class
         self.dataset_filter = dataset
+        self.dataset_weights = dataset_weights
         self.dtype = dtype
         self.device = torch.device(device)
         self.episodes = episodes
@@ -62,6 +64,7 @@ class _BaseDuckDBEpisodicDataset(IterableDataset):
         self._gen: Optional[torch.Generator] = None
         self._datasets: Dict[str, _DatasetMeta] = {}
         self._dataset_names: List[str] = []
+        self._dataset_weight_tensor: Optional[torch.Tensor] = None
         self._label_cache: Dict[str, Sequence[str]] = {}
 
     # ------------------------------------------------------------------
@@ -148,7 +151,28 @@ class _BaseDuckDBEpisodicDataset(IterableDataset):
         self._dataset_names = list(self._datasets.keys())
         if not self._dataset_names:
             raise RuntimeError("No datasets available after applying filter")
+
+        self._prepare_dataset_weights()
         self._label_cache.clear()
+
+    def _prepare_dataset_weights(self) -> None:
+        if self.dataset_weights is None:
+            self._dataset_weight_tensor = None
+            return
+
+        weights: List[float] = []
+        for name in self._dataset_names:
+            weight = float(self.dataset_weights.get(name, 0.0))
+            if weight < 0:
+                raise ValueError("dataset_weights must be non-negative")
+            weights.append(weight)
+
+        total = float(sum(weights))
+        if total <= 0:
+            raise ValueError("dataset_weights must sum to a positive value for the available datasets")
+
+        weight_tensor = torch.tensor(weights, dtype=torch.float32)
+        self._dataset_weight_tensor = weight_tensor / weight_tensor.sum()
 
     def _teardown_worker_state(self) -> None:
         if self._conn is not None:
@@ -156,6 +180,7 @@ class _BaseDuckDBEpisodicDataset(IterableDataset):
         self._conn = None
         self._gen = None
         self._dataset_names = []
+        self._dataset_weight_tensor = None
         self._label_cache.clear()
 
     # ------------------------------------------------------------------
@@ -165,6 +190,9 @@ class _BaseDuckDBEpisodicDataset(IterableDataset):
         assert self._gen is not None
         if len(self._dataset_names) == 1:
             name = self._dataset_names[0]
+        elif self._dataset_weight_tensor is not None:
+            index = int(torch.multinomial(self._dataset_weight_tensor, 1, generator=self._gen).item())
+            name = self._dataset_names[index]
         else:
             index = int(torch.randint(len(self._dataset_names), (1,), generator=self._gen).item())
             name = self._dataset_names[index]
@@ -178,10 +206,21 @@ class _BaseDuckDBEpisodicDataset(IterableDataset):
             labels = self._labels_for_dataset(self._conn, dataset_name, meta, min_samples)
             self._label_cache[dataset_name] = labels
             cache_hit = labels
+        
+        # If not enough unique labels, repeat labels to fill the gap
         if len(cache_hit) < self.num_classes:
-            raise RuntimeError(
-                f"Dataset '{dataset_name}' does not have enough labels with at least {min_samples} samples"
-            )
+            if len(cache_hit) == 0:
+                raise RuntimeError(
+                    f"Dataset '{dataset_name}' does not have any labels with at least {min_samples} samples"
+                )
+            # Convert to list and repeat labels to reach num_classes
+            labels_list = list(cache_hit)
+            while len(labels_list) < self.num_classes:
+                # Add a random label from existing labels
+                idx = int(torch.randint(len(cache_hit), (1,), generator=self._gen).item()) if self._gen is not None else 0
+                labels_list.append(labels_list[idx])
+            return labels_list
+        
         return cache_hit
 
     def _sample_episode(self) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, int]:
@@ -198,10 +237,20 @@ class _BaseDuckDBEpisodicDataset(IterableDataset):
         for local_index, label_position in enumerate(label_indices.tolist()):
             label_name = labels[label_position]
             embeddings = self._fetch_embeddings(self._conn, dataset_name, meta, label_name, min_samples)
+            
+            # If not enough embeddings, repeat samples to fill the gap
             if len(embeddings) < min_samples:
-                raise RuntimeError(
-                    f"Label '{label_name}' in dataset '{dataset_name}' does not provide enough embeddings"
-                )
+                if len(embeddings) == 0:
+                    raise RuntimeError(
+                        f"Label '{label_name}' in dataset '{dataset_name}' has no embeddings available"
+                    )
+                # Repeat embeddings to reach min_samples
+                original_count = len(embeddings)
+                while len(embeddings) < min_samples:
+                    # Add random samples from existing embeddings
+                    sample_idx = int(torch.randint(original_count, (1,), generator=self._gen).item())
+                    embeddings.append(embeddings[sample_idx])
+            
             context_embeddings.extend(embeddings[: self.samples_per_class])
             context_targets.extend([local_index] * self.samples_per_class)
             prediction_candidates.append((embeddings[self.samples_per_class], local_index))
