@@ -1,0 +1,49 @@
+training_loc: "duckdb"
+
+name: test
+
+duckdb-path: "/home/rechenschieber/Documents/GitHub/dataset/output/all_datasets_dinov2.duckdb"
+
+paths:
+  output: "output/duckdb_full"
+
+model:
+  nheads: 12
+  nlayers: 6
+  embed_dim: 1536
+
+optimizer:
+  lr: 0.0005
+  lr_initial: 1e-5 # lr_max
+  lr_target: 1e-6 # lr_min
+  epochs: 1200
+  weight_decay: 1e-5
+  log_step: 10
+  epsilon: 0.1
+  acc_steps: 1
+  lr_encoder: 0.0
+  lr_rest: 5e-5
+  lr_schedule: true
+
+dataloader:
+  num_samples: 10000
+  batch_size: 16
+  num_classes: 10
+  num_images: 5
+  train_ratio: 0.02
+  test_ratio: 1
+  num_workers: 8
+
+dataset_weights:
+  places365_standard: 0.2
+  ilsvrc2012: 0.2
+  vggface2: 0.1
+  products10k: 0.1
+  food-101: 0.1
+  lego_parts: 0.1
+  chestx: 0.05
+  wildlifereid10k: 0.05
+  eurosat: 0.04
+  ham10000: 0.02
+  oxford_flowers: 0.02
+  kau_bcmd: 0.02

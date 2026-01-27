@@ -2,15 +2,15 @@ training_loc: "duckdb"
 
 name: test
 
-duckdb-path: "dataset/test.duckdb"
+duckdb-path: "/home/rechenschieber/Documents/GitHub/dataset/output/hierarchical.duckdb"
 
 paths:
-  output: "output/test"
+  output: "output/duckdb_test"
 
 model:
-  nheads: 8
+  nheads: 12
   nlayers: 6
-  embed_dim: 768
+  embed_dim: 1536
 
 optimizer:
   lr: 0.001
