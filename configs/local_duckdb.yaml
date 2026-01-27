@@ -1,0 +1,35 @@
+training_loc: "duckdb"
+
+name: test
+
+duckdb-path: "dataset/test.duckdb"
+
+paths:
+  output: "output/test"
+
+model:
+  nheads: 8
+  nlayers: 6
+  embed_dim: 768
+
+optimizer:
+  lr: 0.001
+  lr_initial: 5e-4 # lr_max
+  lr_target: 5e-5 # lr_min
+  epochs: 1200
+  weight_decay: 1e-5
+  log_step: 10
+  epsilon: 0.1
+  acc_steps: 1
+  lr_encoder: 0.0
+  lr_rest: 5e-5
+  lr_schedule: true
+
+dataloader:
+  num_samples: 10000
+  batch_size: 16
+  num_classes: 10
+  num_images: 5
+  train_ratio: 0.02
+  test_ratio: 1
+  num_workers: 8
