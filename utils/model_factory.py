@@ -1,6 +1,6 @@
 from torchvision import models
 from model.model_PictSure import CustomTransformerModel
-from model.wrapper import VitNetWrapper, ResNetWrapper, DINOV2Wrapper, CLIPWrapper, DINOV3Wrapper
+from model.wrapper import VitNetWrapper, ResNetWrapper, DINOV2Wrapper, DINOV2_LargeWrapper, CLIPWrapper, DINOV3Wrapper
 
 
 class ModelFactory:
@@ -21,6 +21,8 @@ class ModelFactory:
                 return self._create_resnet_encoder(encoder_type), encoder
             elif encoder == "dinov2":
                 return DINOV2Wrapper(device=self.device).to(self.device), encoder
+            elif encoder == "dinov2-large":
+                return DINOV2_LargeWrapper(device=self.device).to(self.device), encoder
             elif encoder == "dinov3":
                 return DINOV3Wrapper(device=self.device).to(self.device), encoder
             elif encoder == "clip":

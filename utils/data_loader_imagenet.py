@@ -367,7 +367,7 @@ def normalize_samples(sampled_images, pred_image, gaussian=False, sharpness=Fals
 
     if model == "resnet" or model == "vit":
         sampled_images, pred_image = resnet_normalize(sampled_images, pred_image, gaussian, sharpness, resize)
-    elif model == "dinov2":
+    elif model in {"dinov2", "dinov2-large"}:
         sampled_images, pred_image = normalize_dinov2(sampled_images, pred_image, gaussian, sharpness, resize)
     elif model == "clip":
         sampled_images, pred_image = normalize_clip(sampled_images, pred_image, gaussian, sharpness, resize)
