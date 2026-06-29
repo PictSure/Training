@@ -1,2 +1,0 @@
-dataset,num_classes,input_dim,train_samples,test_samples,epochs,hidden_dim,lr,best_test_acc,final_test_acc
-ilsvrc2012,773,768,792771,198151,200,1024,0.001,0.8709,0.8697

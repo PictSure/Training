@@ -60,32 +60,36 @@ def calculate_max_combinations(num_classes: int, subset_size: int = 10) -> int:
 
 
 def generate_random_class_subsets(
-    num_classes: int, 
-    subset_size: int = 10, 
+    num_classes: int,
+    subset_size: int = 10,
     num_subsets: int = 70,
     seed: int = 42
 ) -> List[List[int]]:
-    """Generate random class subsets without replacement."""
+    """Generate random class subsets.
+
+    If num_subsets exceeds the number of unique combinations, unique subsets are
+    cycled so that every run still gets a class subset (the differing seed per run
+    produces a different train/test split even for repeated class subsets).
+    """
     rng = np.random.RandomState(seed)
     max_combos = calculate_max_combinations(num_classes, subset_size)
-    
+
     if max_combos == 0:
         return []
-    
-    # Limit to at most num_subsets, but use min with max_combos
-    actual_num = min(num_subsets, max_combos)
-    
-    subsets = []
-    seen = set()
-    
-    while len(subsets) < actual_num:
-        # Generate random subset
+
+    # Collect all unique subsets (up to the hard limit imposed by combinatorics).
+    unique_count = min(num_subsets, max_combos)
+    unique_subsets: List[List[int]] = []
+    seen: set = set()
+
+    while len(unique_subsets) < unique_count:
         subset = tuple(sorted(rng.choice(num_classes, size=subset_size, replace=False)))
         if subset not in seen:
-            subsets.append(list(subset))
+            unique_subsets.append(list(subset))
             seen.add(subset)
-    
-    return subsets
+
+    # Cycle through unique subsets to reach the requested num_subsets.
+    return [unique_subsets[i % len(unique_subsets)] for i in range(num_subsets)]
 
 
 def load_single_dataset(
@@ -221,24 +225,27 @@ def train_single_dataset(
     device: str = "cpu",
     seed: int = 42,
     early_stop_patience: int = 20,
+    samples_per_class: int | None = None,
+    train_shots: int | None = None,
+    test_shots: int | None = None,
 ) -> dict:
     """Train a 3-layer MLP on one dataset or subset, return accuracy dict."""
 
     rng = np.random.RandomState(seed)
-    
+
     # Filter to class subset if provided
     if class_subset is not None:
         # Create mapping from old class indices to new ones
         mask = np.isin(y, class_subset)
         X_filtered = X[mask].copy()
         y_filtered = y[mask].copy()
-        
+
         # Remap class labels to 0..len(subset)-1
         class_name_subset = [class_names[i] for i in class_subset]
         for new_idx, old_idx in enumerate(sorted(class_subset)):
             y_filtered[y_filtered == old_idx] = new_idx + 1000  # Temporary offset
         y_filtered = y_filtered - 1000
-        
+
         X = X_filtered
         y = y_filtered
         class_names = class_name_subset
@@ -251,9 +258,25 @@ def train_single_dataset(
     for c in range(num_classes):
         c_idx = np.where(y == c)[0]
         rng.shuffle(c_idx)
-        n_test = max(1, int(len(c_idx) * test_ratio))
-        test_idx.extend(c_idx[:n_test].tolist())
-        train_idx.extend(c_idx[n_test:].tolist())
+
+        if train_shots is not None or test_shots is not None:
+            # Few-shot mode: take exactly train_shots train and test_shots test per class.
+            n_train = train_shots if train_shots is not None else len(c_idx) - (test_shots or 1)
+            n_test = test_shots if test_shots is not None else len(c_idx) - n_train
+            if len(c_idx) < n_train + n_test:
+                raise RuntimeError(
+                    f"Class {c} of '{dataset_name}' has only {len(c_idx)} samples "
+                    f"but {n_train} train + {n_test} test = {n_train + n_test} requested."
+                )
+            train_idx.extend(c_idx[:n_train].tolist())
+            test_idx.extend(c_idx[n_train:n_train + n_test].tolist())
+        else:
+            # Ratio mode (default): optionally cap total samples per class first.
+            if samples_per_class is not None:
+                c_idx = c_idx[:samples_per_class]
+            n_test = max(1, int(len(c_idx) * test_ratio))
+            test_idx.extend(c_idx[:n_test].tolist())
+            train_idx.extend(c_idx[n_test:].tolist())
 
     X_train = torch.tensor(X[train_idx], dtype=torch.float32)
     y_train = torch.tensor(y[train_idx], dtype=torch.long)
@@ -292,7 +315,9 @@ def train_single_dataset(
     loss_fn = nn.CrossEntropyLoss()
 
     best_test_acc = 0.0
+    best_train_acc = 0.0
     epochs_without_improvement = 0
+    final_train_acc = 0.0
     final_test_acc = 0.0
 
     for epoch in range(epochs):
@@ -313,6 +338,9 @@ def train_single_dataset(
 
         train_loss = total_loss / total_n
         train_acc = total_correct / total_n
+        final_train_acc = train_acc
+        if train_acc > best_train_acc:
+            best_train_acc = train_acc
 
         # --- test ---
         model.eval()
@@ -341,6 +369,8 @@ def train_single_dataset(
     return {
         "num_classes": num_classes,
         "num_samples": len(train_idx) + len(test_idx),
+        "train_acc": best_train_acc,
+        "final_train_acc": final_train_acc,
         "test_acc": best_test_acc,
         "final_test_acc": final_test_acc,
     }
@@ -364,21 +394,31 @@ def train_multiclass_runs(
     early_stop_patience: int = 20,
     num_runs: int = 70,
     subset_size: int = 10,
+    samples_per_class: int | None = None,
+    train_shots: int | None = None,
+    test_shots: int | None = None,
 ) -> dict:
-    """Train multiple times on random 10-class subsets, return aggregated results."""
+    """Train multiple times on random N-class subsets, return aggregated results."""
     
     num_classes = len(class_names)
-    
+
+    # Fall back to all available classes if the dataset has fewer than subset_size
+    effective_subset_size = min(subset_size, num_classes)
+    if effective_subset_size < subset_size:
+        print(f"  Note: {dataset_name} has only {num_classes} classes; using all {num_classes} instead of {subset_size}")
+
     # Generate class subsets
-    max_combos = calculate_max_combinations(num_classes, subset_size)
-    actual_runs = min(num_runs, max_combos) if max_combos > 0 else 0
-    
-    if actual_runs == 0:
-        print(f"  Warning: Cannot create {subset_size}-class subsets from {num_classes} classes")
+    max_combos = calculate_max_combinations(num_classes, effective_subset_size)
+
+    if max_combos == 0:
+        print(f"  Warning: Cannot create {effective_subset_size}-class subsets from {num_classes} classes")
         return None
-    
-    print(f"  Creating {actual_runs} runs of {subset_size}-class training")
-    class_subsets = generate_random_class_subsets(num_classes, subset_size, actual_runs, seed)
+
+    if max_combos < num_runs:
+        print(f"  Note: only {max_combos} unique {effective_subset_size}-class combination(s); "
+              f"cycling subsets across {num_runs} runs with different splits")
+    print(f"  Creating {num_runs} runs of {effective_subset_size}-class training")
+    class_subsets = generate_random_class_subsets(num_classes, effective_subset_size, num_runs, seed)
     
     run_results = []
     
@@ -401,13 +441,18 @@ def train_multiclass_runs(
             device=device,
             seed=seed + run_idx,
             early_stop_patience=early_stop_patience,
+            samples_per_class=samples_per_class,
+            train_shots=train_shots,
+            test_shots=test_shots,
         )
-        
+
         result["run"] = run_idx + 1
         result["selected_classes"] = class_subset
         run_results.append(result)
     
     # Aggregate results
+    train_accs = [r["train_acc"] for r in run_results]
+    final_train_accs = [r["final_train_acc"] for r in run_results]
     test_accs = [r["test_acc"] for r in run_results]
     final_accs = [r["final_test_acc"] for r in run_results]
     
@@ -415,19 +460,28 @@ def train_multiclass_runs(
         "dataset": dataset_name,
         "total_classes": int(num_classes),
         "num_runs": len(run_results),
-        "subset_size": subset_size,
-        "max_possible_combinations": max_combos,
+        "subset_size": effective_subset_size,
+        "samples_per_class": int(samples_per_class) if samples_per_class is not None else None,
+        "max_possible_combinations": int(max_combos),
         "runs": [
             {
                 "run": int(r["run"]),
                 "num_classes": int(r["num_classes"]),
                 "num_samples": int(r["num_samples"]),
+                "train_acc": float(r["train_acc"]),
+                "final_train_acc": float(r["final_train_acc"]),
                 "test_acc": float(r["test_acc"]),
                 "final_test_acc": float(r["final_test_acc"]),
                 "selected_classes": [int(x) for x in r["selected_classes"]],
             }
             for r in run_results
         ],
+        "average_train_acc": float(np.mean(train_accs)),
+        "std_train_acc": float(np.std(train_accs)),
+        "min_train_acc": float(np.min(train_accs)),
+        "max_train_acc": float(np.max(train_accs)),
+        "average_final_train_acc": float(np.mean(final_train_accs)),
+        "std_final_train_acc": float(np.std(final_train_accs)),
         "average_test_acc": float(np.mean(test_accs)),
         "std_test_acc": float(np.std(test_accs)),
         "min_test_acc": float(np.min(test_accs)),
@@ -459,13 +513,39 @@ def main():
     parser.add_argument("--datasets", nargs="*", default=None, help="Only train on these datasets (default: all)")
     parser.add_argument("--multiclass-runs", type=int, default=70, help="Number of 10-class subset runs per dataset")
     parser.add_argument("--subset-size", type=int, default=10, help="Number of classes per subset")
+    parser.add_argument(
+        "--samples-per-class",
+        type=int,
+        default=None,
+        help="Maximum number of samples to use per class before train/test split (default: use all)",
+    )
+    parser.add_argument(
+        "--train-shots",
+        type=int,
+        default=None,
+        help="Exact number of training samples per class (few-shot mode). Overrides --samples-per-class and --test-ratio.",
+    )
+    parser.add_argument(
+        "--test-shots",
+        type=int,
+        default=None,
+        help="Exact number of test samples per class (few-shot mode). Defaults to same as --train-shots if only that is set.",
+    )
+    parser.add_argument(
+        "--device",
+        default=None,
+        help="Device to use for training (e.g. cpu, cuda, cuda:0, mps). Defaults to auto-detect.",
+    )
     args = parser.parse_args()
 
-    device = (
-        "cuda" if torch.cuda.is_available()
-        else "mps" if torch.backends.mps.is_available()
-        else "cpu"
-    )
+    if args.device is not None:
+        device = args.device
+    else:
+        device = (
+            "cuda" if torch.cuda.is_available()
+            else "mps" if torch.backends.mps.is_available()
+            else "cpu"
+        )
     print(f"Using device: {device}")
 
     output_dir = Path(args.output)
@@ -512,8 +592,11 @@ def main():
             early_stop_patience=args.early_stop_patience,
             num_runs=args.multiclass_runs,
             subset_size=args.subset_size,
+            samples_per_class=args.samples_per_class,
+            train_shots=args.train_shots,
+            test_shots=args.test_shots,
         )
-        
+
         if result:
             all_results[ds_name] = result
             print(f"  => avg_test_acc={result['average_test_acc']:.4f} "

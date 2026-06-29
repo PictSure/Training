@@ -1,0 +1,9 @@
+dataset,MLP test_acc_mean,MLP test_acc_std
+mini_imagenet,0.9882,0.0185
+tiered_imagenet,0.9881,0.0187
+plantdoc,0.8978,0.0925
+pathmnist,0.8865,0.0557
+fgvc_aircraft,0.7846,0.1293
+organcmnist,0.7272,0.0780
+brain_tumor,0.6645,0.0526
+octmnist,0.5157,0.0539
