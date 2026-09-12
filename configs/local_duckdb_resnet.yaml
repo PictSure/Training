@@ -2,15 +2,15 @@ training_loc: "duckdb"
 
 name: test
 
-duckdb-path: "/home/rechenschieber/Documents/GitHub/dataset/output/all_datasets_dinov2.duckdb"
+duckdb-path: "/home/rechenschieber/Documents/GitHub/dataset/output/all_datasets_resnet50.duckdb"
 
 paths:
-  output: "output/duckdb_full"
+  output: "output/resnet"
 
 model:
-  nheads: 12
-  nlayers: 6
-  embed_dim: 1536
+  nheads: 6
+  nlayers: 4
+  embed_dim: 768
 
 optimizer:
   lr: 0.0005
@@ -35,15 +35,19 @@ dataloader:
   num_workers: 8
 
 dataset_weights:
-  places365_standard: 0.2
   ilsvrc2012: 0.2
+  places365_standard: 0.1
   vggface2: 0.1
   products10k: 0.1
-  food-101: 0.1
-  lego_parts: 0.1
+  lego_parts: 0.1 # 0.6
+  food-101: 0.05
+  sd-198: 0.05
   chestx: 0.05
-  wildlifereid10k: 0.05
+  cars196: 0.05
+  wildlifereid10k: 0.05 # 0.25
   eurosat: 0.04
+  plantvillage: 0.025
+  fruits360: 0.025 # 0.09
   ham10000: 0.02
   oxford_flowers: 0.02
-  kau_bcmd: 0.02
+  kau_bcmd: 0.02 # 0.06

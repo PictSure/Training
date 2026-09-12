@@ -2,7 +2,7 @@ import os
 from utils.data_loader_imagenet import get_cluster_random_loader, get_imagenet_random_loader
 from utils.data_loader_cifar10 import get_cifar10_random_loader
 from dataset.hierarchical_loader import (
-    HierarchicalDuckDBEpisodicDataset,
+    HierarchicalDuckDBEpisodicDatasetCashed,
     collate_hierarchical_episodes,
 )
 from torch.utils.data import DataLoader
@@ -87,7 +87,7 @@ class DatasetFactory:
         return training_loader, test_loader
     
     def _get_duckdb_loaders(self):
-        dataset = HierarchicalDuckDBEpisodicDataset(
+        dataset = HierarchicalDuckDBEpisodicDatasetCashed(
             db_path=self.config["duckdb-path"],
             num_classes=self.config["dataloader"]["num_classes"],
             samples_per_class=self.config["dataloader"]["num_images"],

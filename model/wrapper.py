@@ -24,8 +24,14 @@ class ResNetWrapper(nn.Module):
 class DINOV2Wrapper(nn.Module):
     def __init__(self, device="cpu"):
         super(DINOV2Wrapper, self).__init__()
-        self.processor = AutoImageProcessor.from_pretrained('facebook/dinov2-base')
-        self.model = AutoModel.from_pretrained('facebook/dinov2-base').to(device)
+        self.processor = AutoImageProcessor.from_pretrained(
+            "facebook/dinov2-base",
+            force_download=True,
+        )
+        self.model = AutoModel.from_pretrained(
+            "facebook/dinov2-base",
+            force_download=True,
+        ).to(device)
         self.device = device
         # Get latent dim by running a dummy input through the model
         dummy = torch.zeros(1, 3, 224, 224)
@@ -40,8 +46,33 @@ class DINOV2Wrapper(nn.Module):
         batch_size = x.size(0)
         x = x.view(-1, 3, 224, 224).to(self.device)
         with torch.no_grad():
-            outputs = self.model(x)
+            outputs = self.model(pixel_values=x)
         # Use [CLS] token embedding as representation
+        cls_embeddings = outputs.last_hidden_state[:, 0, :]
+        cls_embeddings = cls_embeddings.view(batch_size, num_images, self.latent_dim)
+        return cls_embeddings
+
+
+class DINOV2_LargeWrapper(nn.Module):
+    def __init__(self, device="cpu"):
+        super(DINOV2_LargeWrapper, self).__init__()
+        self.processor = AutoImageProcessor.from_pretrained("facebook/dinov2-large")
+        self.model = AutoModel.from_pretrained("facebook/dinov2-large").to(device)
+        self.device = device
+        self.model.eval()
+        dummy = torch.zeros(1, 3, 224, 224)
+        inputs = self.processor(images=[dummy.squeeze(0).permute(1, 2, 0).numpy()], return_tensors="pt")
+        inputs = {k: v.to(device) for k, v in inputs.items()}
+        with torch.no_grad():
+            outputs = self.model(**inputs)
+        self.latent_dim = outputs.last_hidden_state.shape[-1]
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        num_images = x.size(1)
+        batch_size = x.size(0)
+        x = x.view(-1, 3, 224, 224).to(self.device)
+        with torch.no_grad():
+            outputs = self.model(pixel_values=x)
         cls_embeddings = outputs.last_hidden_state[:, 0, :]
         cls_embeddings = cls_embeddings.view(batch_size, num_images, self.latent_dim)
         return cls_embeddings
