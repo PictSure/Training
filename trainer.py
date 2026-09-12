@@ -19,38 +19,59 @@ class Trainer:
         self.best_loss = float("inf")
         self.best_acc = 0
         self.start_epoch = 0
+        self.EPOCHS = self.config["optimizer"]["epochs"]
+        self.training_loader, self.test_loader = DatasetFactory(config, args, self.start_epoch).get_dataloaders()
+        try:
+            self.config["embedding_dim"] = self.training_loader.dataset.embedding_dim
+        except:
+            self.config["embedding_dim"] = None
         self.model, self.encoder_name = ModelFactory(config, device).create_model()
         self._setup_optimizer()
         self._setup_writer_and_checkpoint()
         self._setup_lrschedule()
-        self.training_loader, self.test_loader = DatasetFactory(config, args, self.start_epoch).get_dataloaders()
         self.loss_fn = torch.nn.CrossEntropyLoss(label_smoothing=config["optimizer"]["epsilon"])
         self.losses = []
         self.accuracies = []
         self.test_accuracies = []
         self.writer.log_hyperparameters(config)
 
+
     def _setup_optimizer(self):
         config = self.config
-        encoder_params = list(self.model.embedding.parameters())
-        encoder_param_ids = {id(param) for param in encoder_params}
-        other_params = [param for param in self.model.parameters() if id(param) not in encoder_param_ids]
-        for param in self.model.embedding.parameters():
-            param.requires_grad = False
-        self.optimizer = torch.optim.AdamW([
-            {'params': encoder_params, 'lr': float(config["optimizer"]["lr_encoder"])},
-            {'params': other_params, 'lr': float(config["optimizer"]["lr_rest"])}
-        ], weight_decay=float(config["optimizer"]["weight_decay"]))
+        if config.get("encoder"):
+            encoder_params = list(self.model.embedding.parameters())
+            encoder_param_ids = {id(param) for param in encoder_params}
+            other_params = [param for param in self.model.parameters() if id(param) not in encoder_param_ids]
+            for param in self.model.embedding.parameters():
+                param.requires_grad = False
+            self.optimizer = torch.optim.AdamW([
+                {'params': encoder_params, 'lr': float(config["optimizer"]["lr_encoder"])},
+                {'params': other_params, 'lr': float(config["optimizer"]["lr_rest"])}
+            ], weight_decay=float(config["optimizer"]["weight_decay"]))
+        else:
+            self.optimizer = torch.optim.AdamW(
+                self.model.parameters(),
+                lr=float(config["optimizer"]["lr_rest"]),
+                weight_decay=float(config["optimizer"]["weight_decay"]),
+            )
 
     def _setup_lrschedule(self):
-        self.EPOCHS = config["optimizer"]["epochs"]
-        if config["optimizer"]["lr_schedule"]:
-            self.scheduler = CustomLRScheduler(
-                optimizer=self.optimizer,
-                epochs=self.EPOCHS,
-                param_group_index=1,
-                last_epoch=self.start_epoch-1
-            )
+        if self.config["optimizer"]["lr_schedule"]:
+            if self.config.get("encoder") is not None:
+                self.scheduler = CustomLRScheduler(
+                    optimizer=self.optimizer,
+                    epochs=self.EPOCHS,
+                    param_group_index=1,
+                    last_epoch=self.start_epoch-1
+                )
+            else:
+                self.scheduler = CustomLRScheduler(
+                    optimizer=self.optimizer,
+                    epochs=self.EPOCHS,
+                    last_epoch=self.start_epoch-1,
+                    warmup_epochs=self.EPOCHS*0.2,
+                    plateau_epochs=self.EPOCHS*0.1
+                )
         else:
             self.scheduler = None
 
@@ -91,9 +112,12 @@ class Trainer:
             progressbar = trange(len(self.training_loader), leave=False)
             for batch_idx, (images, labels, pred_image, pred_label) in enumerate(self.training_loader):
                 images, labels, pred_image, pred_label = images.to(self.device, non_blocking=True), labels.to(self.device, non_blocking=True), pred_image.to(self.device, non_blocking=True), pred_label.to(self.device, non_blocking=True)
-                images, pred_image = normalize_samples(images, pred_image, resize=(224, 224), model=self.encoder_name)
+                if config.get("encoder") is not None:
+                    images, pred_image = normalize_samples(images, pred_image, resize=(224, 224), model=self.encoder_name)
 
-                outputs = self.model.forward(images, labels, pred_image)
+                    outputs = self.model.forward(images, labels, pred_image)
+                else:
+                    outputs = self.model.forward(images, labels, pred_image, embedd=False)
 
                 pred_label = pred_label.view(-1)
                 loss = self.loss_fn(outputs, pred_label)
@@ -123,27 +147,33 @@ class Trainer:
                 clip_grad_norm_(self.model.parameters(), max_norm=0.5)
                 self.optimizer.step()
                 self.optimizer.zero_grad()
-            test_correct = 0
-            test_samples = 0
-            with torch.no_grad():
-                progressbar = trange(len(self.test_loader), leave=False)
-                for images, labels, pred_image, pred_label in self.test_loader:
-                    images, labels, pred_image, pred_label = images.to(self.device, non_blocking=True), labels.to(self.device, non_blocking=True), pred_image.to(self.device, non_blocking=True), pred_label.to(self.device, non_blocking=True)
-                    images, pred_image = normalize_samples(images, pred_image, resize=(224, 224), model=self.encoder_name)
+            test_acc = None
+            if self.test_loader is not None:
+                test_correct = 0
+                test_samples = 0
+                with torch.no_grad():
+                    progressbar = trange(len(self.test_loader), leave=False)
+                    for images, labels, pred_image, pred_label in self.test_loader:
+                        images, labels, pred_image, pred_label = images.to(self.device, non_blocking=True), labels.to(self.device, non_blocking=True), pred_image.to(self.device, non_blocking=True), pred_label.to(self.device, non_blocking=True)
+                        if config.get("encoder") is not None:
+                            images, pred_image = normalize_samples(images, pred_image, resize=(224, 224), model=self.encoder_name)
 
-                    outputs = self.model.forward(images, labels, pred_image)
+                            outputs = self.model.forward(images, labels, pred_image)
+                        else:
+                            outputs = self.model.forward(images, labels, pred_image, embedd=False)
 
-                    predicted = torch.argmax(outputs, dim=1)
-                    correct = (predicted == pred_label.view(-1)).sum().item()
-                    total = pred_label.size(0)
-                    test_correct += correct
-                    test_samples += total
-                    progressbar.update()
-                progressbar.close()
-            test_acc = test_correct / test_samples
+                        predicted = torch.argmax(outputs, dim=1)
+                        correct = (predicted == pred_label.view(-1)).sum().item()
+                        total = pred_label.size(0)
+                        test_correct += correct
+                        test_samples += total
+                        progressbar.update()
+                    progressbar.close()
+                test_acc = test_correct / test_samples if test_samples > 0 else 0
             avg_loss = total_loss / size
             accuracy = total_correct / total_samples
-            self.test_accuracies.append(test_acc)
+            if test_acc is not None:
+                self.test_accuracies.append(test_acc)
             self.losses.append(avg_loss)
             self.accuracies.append(accuracy)
             total_grad_norm = 0.0
@@ -154,21 +184,29 @@ class Trainer:
                     grad_param_count += 1
             avg_grad_norm = total_grad_norm / grad_param_count if grad_param_count > 0 else 0.0
             epoch_progress.update()
-            epoch_progress.set_description(
-                "Epoch [{:>5d}/{:>5d}], Loss {:.4f}, Accuracy: {:.2f}, Test Acc: {:.2f}, Avg Gradient Norm: {:.6f}".format(
-                    epoch+1, self.EPOCHS, avg_loss, accuracy, test_acc, avg_grad_norm
-                )
+            desc = "Epoch [{:>5d}/{:>5d}], Loss {:.4f}, Accuracy: {:.2f}".format(
+                epoch+1, self.EPOCHS, avg_loss, accuracy
             )
+            if test_acc is not None:
+                desc += ", Test Acc: {:.2f}".format(test_acc)
+            desc += ", Avg Gradient Norm: {:.6f}".format(avg_grad_norm)
+            epoch_progress.set_description(desc)
             if self.scheduler:
                 self.scheduler.step()
-            self.writer.log_epoch_metrics("train", epoch, {
-                "loss": avg_loss, "acc": accuracy, "test_acc": test_acc, "avg_grad_norm": avg_grad_norm, "lrs": [param_group["lr"] if any(p.requires_grad for p in param_group["params"]) else None for param_group in self.optimizer.param_groups]
-            })
+            epoch_metrics = {
+                "loss": avg_loss,
+                "acc": accuracy,
+                "avg_grad_norm": avg_grad_norm,
+                "lrs": [param_group["lr"] if any(p.requires_grad for p in param_group["params"]) else None for param_group in self.optimizer.param_groups]
+            }
+            if test_acc is not None:
+                epoch_metrics["test_acc"] = test_acc
+            self.writer.log_epoch_metrics("train", epoch, epoch_metrics)
             self.writer.flush()
             if avg_loss < self.best_loss:
                 self.best_loss = avg_loss
                 self.writer.save_model(model=self.model, filename="best_loss_model.pt")
-            if test_acc > self.best_acc:
+            if test_acc is not None and test_acc > self.best_acc:
                 self.best_acc = test_acc
                 self.writer.save_model(model=self.model, filename="best_acc_model.pt")
             checkpoint = {

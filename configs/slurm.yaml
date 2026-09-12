@@ -16,8 +16,8 @@ model:
 
 optimizer:
   lr: 0.001
-  lr_initial: 0.000001
-  lr_target: 0.0000001
+  lr_initial: 5e-4 # lr_max
+  lr_target: 5e-5 # lr_min
   epochs: 10
   weight_decay: 0.00001
   log_step: 500
